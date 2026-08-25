@@ -1,5 +1,6 @@
 """CLI: pull Loads + Invoices from Alvys and write a multi-sheet Excel report
-covering load/shipment activity, financial/billing, and accessorial charges."""
+covering load/shipment activity, financial/billing, accessorial charges, and
+unbilled (delivered but not yet invoiced/paid-to-carrier) loads."""
 
 import argparse
 import json
@@ -25,6 +26,87 @@ ACCESSORIAL_KEYWORDS = (
     "permit", "tarp", "pallet exchange", "reconsign", "after hours",
     "holiday", "weekend", "hazmat", "oversize", "overweight",
 )
+
+# NOTE: same "field names aren't confirmed against a live call" caveat as
+# above. A load is in scope for the unbilled report only once it has been
+# delivered but not yet invoiced/paid-to-carrier -- i.e. its status is
+# neither still-in-transit (PRE_DELIVERY_STATUSES) nor already billed
+# (BILLED_STATUSES), case-insensitive. Adjust these sets once real Alvys
+# status values are confirmed.
+PRE_DELIVERY_STATUSES = {"open", "covered", "dispatched", "in transit"}
+BILLED_STATUSES = {"invoiced", "complete"}
+
+STATUS_KEYS = ("status", "loadStatus", "currentStatus")
+CARRIER_KEYS = ("carrierName", "carrier", "carrierCompanyName")
+LOAD_CUSTOMER_KEYS = ("customerName", "customer", "billTo")
+DELIVERY_DATE_KEYS = ("deliveryDate", "actualDeliveryDate", "dropDate", "deliveredAt", "deliveryActualDate")
+LOAD_RATE_KEYS = ("totalRate", "rate", "customerRate", "agreedRate", "price")
+
+
+def _first_column(df, candidates):
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
+def build_unbilled_loads_df(loads_df):
+    """Delivered loads not yet invoiced/paid-to-carrier, with days-since-delivery added.
+
+    Excludes both pre-delivery statuses (open/covered/dispatched/in transit)
+    and already-billed statuses (invoiced/complete) -- only loads sitting in
+    a post-delivery, pre-invoice status are "unbilled" for this report.
+    """
+    status_col = _first_column(loads_df, STATUS_KEYS)
+    if status_col is None:
+        return loads_df.iloc[0:0].copy()
+
+    normalized_status = loads_df[status_col].astype(str).str.strip().str.lower()
+    excluded = PRE_DELIVERY_STATUSES | BILLED_STATUSES
+    unbilled = loads_df[~normalized_status.isin(excluded)].copy()
+
+    delivery_col = _first_column(unbilled, DELIVERY_DATE_KEYS)
+    if delivery_col:
+        delivery_dates = pd.to_datetime(unbilled[delivery_col], errors="coerce")
+        unbilled["daysSinceDelivery"] = (pd.Timestamp(date.today()) - delivery_dates).dt.days
+    else:
+        unbilled["daysSinceDelivery"] = pd.NA
+
+    return unbilled.sort_values("daysSinceDelivery", ascending=False, na_position="last").reset_index(drop=True)
+
+
+def summarize_unbilled_by(unbilled_df, group_candidates):
+    """Group unbilled loads by carrier/customer: count, aging, and total rate value."""
+    columns = ["group", "loadCount", "avgDaysSinceDelivery", "maxDaysSinceDelivery", "totalValue"]
+    group_col = _first_column(unbilled_df, group_candidates)
+    if unbilled_df.empty or group_col is None:
+        return pd.DataFrame(columns=columns)
+
+    working = unbilled_df.copy()
+    working["_group"] = working[group_col].where(working[group_col].notna() & (working[group_col] != ""), "(unspecified)")
+
+    summary = working.groupby("_group").size().rename("loadCount").reset_index().rename(columns={"_group": "group"})
+
+    if "daysSinceDelivery" in working.columns:
+        days = working.groupby("_group")["daysSinceDelivery"].agg(["mean", "max"]).reset_index().rename(
+            columns={"_group": "group", "mean": "avgDaysSinceDelivery", "max": "maxDaysSinceDelivery"}
+        )
+        days["avgDaysSinceDelivery"] = days["avgDaysSinceDelivery"].round(1)
+        summary = summary.merge(days, on="group", how="left")
+    else:
+        summary["avgDaysSinceDelivery"] = pd.NA
+        summary["maxDaysSinceDelivery"] = pd.NA
+
+    rate_col = _first_column(working, LOAD_RATE_KEYS)
+    if rate_col:
+        totals = working.groupby("_group")[rate_col].apply(
+            lambda s: pd.to_numeric(s, errors="coerce").sum()
+        ).rename("totalValue").reset_index().rename(columns={"_group": "group"})
+        summary = summary.merge(totals, on="group", how="left")
+    else:
+        summary["totalValue"] = pd.NA
+
+    return summary.sort_values("loadCount", ascending=False).reset_index(drop=True)
 
 
 def parse_args():
@@ -106,7 +188,7 @@ def build_accessorials_df(invoices_payload):
     return line_items_df[mask].reset_index(drop=True)
 
 
-def build_summary_df(loads_df, invoices_df, accessorials_df, start_date, end_date):
+def build_summary_df(loads_df, invoices_df, accessorials_df, unbilled_df, start_date, end_date):
     total_revenue = None
     for col in ("totalAmount", "amount", "total"):
         if col in invoices_df.columns:
@@ -119,6 +201,16 @@ def build_summary_df(loads_df, invoices_df, accessorials_df, start_date, end_dat
             accessorial_total = pd.to_numeric(accessorials_df[col], errors="coerce").sum()
             break
 
+    avg_days = max_days = unbilled_value = None
+    if "daysSinceDelivery" in unbilled_df.columns:
+        days = pd.to_numeric(unbilled_df["daysSinceDelivery"], errors="coerce")
+        if days.notna().any():
+            avg_days = round(days.mean(), 1)
+            max_days = int(days.max())
+    rate_col = _first_column(unbilled_df, LOAD_RATE_KEYS)
+    if rate_col:
+        unbilled_value = pd.to_numeric(unbilled_df[rate_col], errors="coerce").sum()
+
     return pd.DataFrame([
         {"metric": "Start date", "value": start_date},
         {"metric": "End date", "value": end_date},
@@ -127,6 +219,10 @@ def build_summary_df(loads_df, invoices_df, accessorials_df, start_date, end_dat
         {"metric": "Total invoiced revenue", "value": total_revenue},
         {"metric": "Accessorial line items", "value": len(accessorials_df)},
         {"metric": "Total accessorial charges", "value": accessorial_total},
+        {"metric": "Unbilled loads", "value": len(unbilled_df)},
+        {"metric": "Avg days since delivery (unbilled)", "value": avg_days},
+        {"metric": "Oldest unbilled (days since delivery)", "value": max_days},
+        {"metric": "Unbilled value", "value": unbilled_value},
     ])
 
 
@@ -146,10 +242,16 @@ def main():
     loads_df = to_dataframe(loads_payload)
     invoices_df = to_dataframe(invoices_payload)
     accessorials_df = build_accessorials_df(invoices_payload)
-    summary_df = build_summary_df(loads_df, invoices_df, accessorials_df, args.start_date, args.end_date)
+    unbilled_df = build_unbilled_loads_df(loads_df)
+    unbilled_by_carrier_df = summarize_unbilled_by(unbilled_df, CARRIER_KEYS)
+    unbilled_by_customer_df = summarize_unbilled_by(unbilled_df, LOAD_CUSTOMER_KEYS)
+    summary_df = build_summary_df(loads_df, invoices_df, accessorials_df, unbilled_df, args.start_date, args.end_date)
 
     with pd.ExcelWriter(args.output, engine="openpyxl") as writer:
         summary_df.to_excel(writer, sheet_name="Summary", index=False)
+        unbilled_df.to_excel(writer, sheet_name="Unbilled Loads", index=False)
+        unbilled_by_carrier_df.to_excel(writer, sheet_name="Unbilled by Carrier", index=False)
+        unbilled_by_customer_df.to_excel(writer, sheet_name="Unbilled by Customer", index=False)
         loads_df.to_excel(writer, sheet_name="Loads", index=False)
         invoices_df.to_excel(writer, sheet_name="Invoices", index=False)
         accessorials_df.to_excel(writer, sheet_name="Accessorials", index=False)
@@ -169,6 +271,9 @@ def main():
                 "loads": to_records(loads_df),
                 "invoices": to_records(invoices_df),
                 "accessorials": to_records(accessorials_df),
+                "unbilled": to_records(unbilled_df),
+                "unbilledByCarrier": to_records(unbilled_by_carrier_df),
+                "unbilledByCustomer": to_records(unbilled_by_customer_df),
             },
             f,
             indent=2,
@@ -179,6 +284,7 @@ def main():
     print(f"  Loads: {len(loads_df)} rows")
     print(f"  Invoices: {len(invoices_df)} rows")
     print(f"  Accessorial line items: {len(accessorials_df)} rows")
+    print(f"  Unbilled loads: {len(unbilled_df)} rows")
 
 
 if __name__ == "__main__":

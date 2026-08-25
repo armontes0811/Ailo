@@ -16,12 +16,14 @@
     --accent-ink: #fff7f0;
     --accent-soft: #f3e1d4;
     --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
     --chart-surface: #fcfcfb;
     --grid-line: #e1e0d9;
-    --series-revenue: #2a78d6;
     --series-status: #1baf7a;
-    --series-accessorial: #eb6834;
-    --series-customer: #4a3aa7;
+    --series-aging: #2a78d6;
+    --series-carrier: #4a3aa7;
+    --series-customer: #eb6834;
     --shadow: 0 1px 2px rgba(18, 24, 26, 0.04), 0 8px 24px -12px rgba(18, 24, 26, 0.18);
   }
   @media (prefers-color-scheme: dark) {
@@ -38,12 +40,14 @@
       --accent-ink: #1a1006;
       --accent-soft: rgba(226, 128, 63, 0.18);
       --good: #35c235;
+      --warning: #fab219;
+      --critical: #e66767;
       --chart-surface: #1a1a19;
       --grid-line: #2c2c2a;
-      --series-revenue: #3987e5;
       --series-status: #199e70;
-      --series-accessorial: #d95926;
-      --series-customer: #9085e9;
+      --series-aging: #3987e5;
+      --series-carrier: #9085e9;
+      --series-customer: #d95926;
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
     }
   }
@@ -152,6 +156,19 @@
   }
   .link-btn:hover { color: var(--accent); }
   input[type="file"] { display: none; }
+
+  .status-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .status-filter .filter-label {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    margin-right: 2px;
+  }
+  .chip {
+    appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-secondary);
+    padding: 6px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .chip .num { color: inherit; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
 
   .kpis {
     display: grid;
@@ -327,8 +344,8 @@
 <div class="app">
   <header class="topbar">
     <div class="titles">
-      <span class="kicker">Alvys TMS &middot; Loads &amp; Invoices</span>
-      <h1>Freight report dashboard</h1>
+      <span class="kicker">Alvys TMS &middot; Unbilled &amp; Unpaid Loads</span>
+      <h1>Unbilled loads dashboard</h1>
     </div>
     <div class="meta-row" id="meta-row"></div>
   </header>
@@ -350,29 +367,30 @@
   </div>
 
   <main id="report-view" hidden>
+    <div class="status-filter" id="status-filter"></div>
     <section class="kpis" id="kpis"></section>
 
     <section class="charts">
-      <article class="chart-card" data-key="revenue">
-        <header><h2>Revenue trend</h2><button class="link-btn" data-toggle="revenue">Table</button></header>
-        <p class="chart-note" id="revenue-note"></p>
-        <div class="chart-body" id="chart-revenue"></div>
-      </article>
-
       <article class="chart-card" data-key="status">
-        <header><h2>Loads by status</h2><button class="link-btn" data-toggle="status">Table</button></header>
+        <header><h2>Unbilled loads by status</h2><button class="link-btn" data-toggle="status">Table</button></header>
         <p class="chart-note" id="status-note"></p>
         <div class="chart-body" id="chart-status"></div>
       </article>
 
-      <article class="chart-card" data-key="accessorial">
-        <header><h2>Accessorial charges by type</h2><button class="link-btn" data-toggle="accessorial">Table</button></header>
-        <p class="chart-note" id="accessorial-note"></p>
-        <div class="chart-body" id="chart-accessorial"></div>
+      <article class="chart-card" data-key="aging">
+        <header><h2>Days since delivery</h2><button class="link-btn" data-toggle="aging">Table</button></header>
+        <p class="chart-note" id="aging-note"></p>
+        <div class="chart-body" id="chart-aging"></div>
+      </article>
+
+      <article class="chart-card" data-key="carrier">
+        <header><h2>Unbilled loads by carrier</h2><button class="link-btn" data-toggle="carrier">Table</button></header>
+        <p class="chart-note" id="carrier-note"></p>
+        <div class="chart-body" id="chart-carrier"></div>
       </article>
 
       <article class="chart-card" data-key="customer">
-        <header><h2>Top customers by revenue</h2><button class="link-btn" data-toggle="customer">Table</button></header>
+        <header><h2>Unbilled loads by customer</h2><button class="link-btn" data-toggle="customer">Table</button></header>
         <p class="chart-note" id="customer-note"></p>
         <div class="chart-body" id="chart-customer"></div>
       </article>
@@ -385,11 +403,17 @@
   </main>
 
   <footer class="note">
-    Field names for accessorial charge classification and revenue dates are best-effort
-    (see <code>LINE_ITEM_KEYS</code> / <code>ACCESSORIAL_KEYWORDS</code> in
-    <code>generate_report.py</code>) &mdash; if a chart below shows &ldquo;field not found,&rdquo;
-    check the raw data tables for the real column name and have it added to the script.
-    To refresh: run <code>python generate_report.py</code>, then
+    A load counts as unbilled/unpaid once it has been delivered but is sitting in
+    any status other than &ldquo;Invoiced&rdquo; or &ldquo;Complete&rdquo; &mdash; loads still
+    open, covered, dispatched, or in transit are excluded entirely. Use the status
+    filter above to narrow to one post-delivery status at a time. Status, carrier,
+    delivery-date, and rate field names are best-effort (see
+    <code>PRE_DELIVERY_STATUSES</code>, <code>BILLED_STATUSES</code>,
+    <code>STATUS_KEYS</code>, <code>CARRIER_KEYS</code>, <code>DELIVERY_DATE_KEYS</code>,
+    <code>LOAD_RATE_KEYS</code> in <code>generate_report.py</code>) &mdash; if a chart below
+    shows &ldquo;field not found,&rdquo; check the Unbilled Loads tab for the real column
+    name and have it added to the script. To refresh: run
+    <code>python generate_report.py</code>, then
     <code>python build_dashboard.py alvys_report.json</code>, then republish this page.
   </footer>
 </div>
@@ -412,6 +436,12 @@
   var currentData = PUBLISHED_DATA;
   var currentSource = "published";
   var chartData = {}; // key -> {items, valueUnit} for table toggles
+  var statusFilter = "all";
+
+  var STATUS_CANDIDATES = ["status", "loadStatus", "currentStatus"];
+  var CARRIER_CANDIDATES = ["carrierName", "carrier", "carrierCompanyName"];
+  var CUSTOMER_CANDIDATES = ["customerName", "customer", "billTo"];
+  var RATE_CANDIDATES = ["totalRate", "rate", "customerRate", "agreedRate", "price"];
 
   function readOverride() {
     try {
@@ -441,6 +471,11 @@
   function fmtPct(n) {
     if (n === null || n === undefined || isNaN(n)) return "—";
     return (n * 100).toFixed(1) + "%";
+  }
+  function fmtDays(n) {
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    var rounded = Math.round(n * 10) / 10;
+    return rounded + (rounded === 1 ? " day" : " days");
   }
   function isEmpty(v) { return v === null || v === undefined || v === ""; }
 
@@ -655,12 +690,13 @@
 
   // ---------- raw data tabs ----------
   var RAW_TABS = [
+    { key: "unbilled", label: "Unbilled Loads" },
     { key: "summary", label: "Summary" },
     { key: "loads", label: "Loads" },
     { key: "invoices", label: "Invoices" },
     { key: "accessorials", label: "Accessorials" },
   ];
-  var activeTab = "summary";
+  var activeTab = "unbilled";
 
   function renderRawTable(records) {
     var table = document.getElementById("raw-table");
@@ -700,43 +736,97 @@
     table.appendChild(tbody);
   }
 
-  function renderTabs(report) {
+  function renderTabs(report, filteredUnbilled) {
     var wrap = document.getElementById("raw-tabs");
     wrap.innerHTML = "";
     RAW_TABS.forEach(function (tab) {
+      var data = tab.key === "unbilled" ? filteredUnbilled : (report[tab.key] || []);
       var btn = document.createElement("button");
       btn.className = "tab";
       btn.setAttribute("role", "tab");
       btn.setAttribute("aria-selected", String(tab.key === activeTab));
-      btn.textContent = tab.label + " (" + ((report[tab.key] || []).length) + ")";
+      btn.textContent = tab.label + " (" + data.length + ")";
       btn.addEventListener("click", function () {
         activeTab = tab.key;
-        renderTabs(report);
-        renderRawTable(report[tab.key]);
+        renderTabs(report, filteredUnbilled);
+        renderRawTable(data);
       });
       wrap.appendChild(btn);
     });
-    renderRawTable(report[activeTab]);
+    renderRawTable(activeTab === "unbilled" ? filteredUnbilled : (report[activeTab] || []));
+  }
+
+  // ---------- status filter ----------
+  function filterByStatus(unbilled, filter) {
+    if (filter === "all") return unbilled;
+    var statusKey = resolveKey(unbilled, STATUS_CANDIDATES);
+    if (!statusKey) return unbilled;
+    return unbilled.filter(function (r) { return String(r[statusKey]) === filter; });
+  }
+
+  function renderStatusFilter(unbilled) {
+    var wrap = document.getElementById("status-filter");
+    wrap.innerHTML = "";
+    var statusKey = resolveKey(unbilled, STATUS_CANDIDATES);
+    if (!statusKey || !unbilled.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+
+    var counts = {};
+    unbilled.forEach(function (r) {
+      var v = isEmpty(r[statusKey]) ? "(unspecified)" : String(r[statusKey]);
+      counts[v] = (counts[v] || 0) + 1;
+    });
+    var statuses = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+
+    var label = document.createElement("span");
+    label.className = "filter-label";
+    label.textContent = "Status";
+    wrap.appendChild(label);
+
+    function makeChip(value, text, count) {
+      var chip = document.createElement("button");
+      chip.className = "chip";
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", String(statusFilter === value));
+      chip.innerHTML = "";
+      chip.appendChild(document.createTextNode(text + " "));
+      var countEl = document.createElement("span");
+      countEl.className = "num";
+      countEl.textContent = "(" + count + ")";
+      chip.appendChild(countEl);
+      chip.addEventListener("click", function () {
+        statusFilter = value;
+        applyFilterAndRender();
+      });
+      wrap.appendChild(chip);
+    }
+
+    makeChip("all", "All", unbilled.length);
+    statuses.forEach(function (s) { makeChip(s, s, counts[s]); });
   }
 
   // ---------- KPIs ----------
-  function summaryMetric(summary, name) {
-    var row = (summary || []).find(function (r) { return r.metric === name; });
-    return row ? row.value : null;
-  }
-
-  function renderKpis(report) {
+  function renderKpis(unbilled) {
     var wrap = document.getElementById("kpis");
     wrap.innerHTML = "";
-    var revenue = summaryMetric(report.summary, "Total invoiced revenue");
-    var accessorialTotal = summaryMetric(report.summary, "Total accessorial charges");
-    var share = revenue ? (accessorialTotal || 0) / revenue : null;
+
+    var days = unbilled
+      .map(function (r) { return r.daysSinceDelivery; })
+      .filter(function (d) { return !isEmpty(d) && !isNaN(d); })
+      .map(Number);
+    var avgDays = days.length ? days.reduce(function (a, b) { return a + b; }, 0) / days.length : null;
+    var oldestDays = days.length ? Math.max.apply(null, days) : null;
+
+    var rateKey = resolveKey(unbilled, RATE_CANDIDATES);
+    var unbilledValue = rateKey
+      ? unbilled.reduce(function (sum, r) { return sum + toNumber(r[rateKey]); }, 0)
+      : null;
 
     var tiles = [
-      { label: "Loads", value: fmtNum(report.loads.length) },
-      { label: "Invoices", value: fmtNum(report.invoices.length) },
-      { label: "Total invoiced revenue", value: fmtMoney(revenue) },
-      { label: "Accessorial share of revenue", value: fmtPct(share), sub: fmtMoney(accessorialTotal) + " total" },
+      { label: "Unbilled loads", value: fmtNum(unbilled.length) },
+      { label: "Avg days since delivery", value: fmtDays(avgDays) },
+      { label: "Oldest unbilled", value: fmtDays(oldestDays) },
+      { label: "Unbilled value", value: rateKey ? fmtMoney(unbilledValue) : "—" },
     ];
     tiles.forEach(function (t) {
       var card = document.createElement("div");
@@ -761,47 +851,54 @@
     doRender();
   }
 
-  function renderCharts(report) {
-    // Revenue trend
-    var dateKey = resolveKey(report.invoices, ["invoiceDate", "date", "issueDate", "billDate", "createdAt", "created"]);
-    var amountKey = resolveKey(report.invoices, ["totalAmount", "amount", "total"]);
-    var revenueNote = document.getElementById("revenue-note");
-    var points = null;
-    if (dateKey && amountKey) {
-      var byMonth = {};
-      report.invoices.forEach(function (inv) {
-        var label = monthLabel(inv[dateKey]);
-        if (!label) return;
-        var sortKey = monthSortKey(inv[dateKey]);
-        byMonth[sortKey] = byMonth[sortKey] || { label: label, value: 0 };
-        byMonth[sortKey].value += toNumber(inv[amountKey]);
-      });
-      var keys = Object.keys(byMonth).sort();
-      points = keys.map(function (k) { return byMonth[k]; });
-      revenueNote.textContent = points.length ? "By " + dateKey + " (" + amountKey + ")" : "";
-    } else {
-      revenueNote.textContent = "Couldn't find a date field on invoices — check the Invoices tab below for the real column name.";
-    }
-    registerChart("revenue", "chart-revenue", "revenue-note", null, "money", "var(--series-revenue)", "line",
-      "No date field found on invoices.", points);
+  var AGING_BUCKETS = [
+    { label: "0–3 days", test: function (d) { return d <= 3; } },
+    { label: "4–7 days", test: function (d) { return d > 3 && d <= 7; } },
+    { label: "8–14 days", test: function (d) { return d > 7 && d <= 14; } },
+    { label: "15+ days", test: function (d) { return d > 14; } },
+  ];
 
-    // Load status
-    var statusGroup = groupSum(report.loads, ["status", "loadStatus", "currentStatus"], []);
-    document.getElementById("status-note").textContent = statusGroup.key ? "By " + statusGroup.key : "Couldn't find a status field on loads — check the Loads tab below.";
+  function renderCharts(unbilled) {
+    // Unbilled loads by status
+    var statusGroup = groupSum(unbilled, STATUS_CANDIDATES, []);
+    document.getElementById("status-note").textContent = statusGroup.key ? "By " + statusGroup.key : "Couldn't find a status field on unbilled loads — check the Unbilled Loads tab below.";
     registerChart("status", "chart-status", "status-note", statusGroup.items, "count", "var(--series-status)", "bar",
-      "No status field found on loads.");
+      "No status field found on unbilled loads.");
 
-    // Accessorials by type
-    var accGroup = groupSum(report.accessorials, ["type", "chargeType", "category"], ["amount", "total"]);
-    document.getElementById("accessorial-note").textContent = accGroup.key ? "By " + accGroup.key : (report.accessorials.length ? "Couldn't find a charge-type field — check the Accessorials tab below." : "No accessorial line items in this report.");
-    registerChart("accessorial", "chart-accessorial", "accessorial-note", accGroup.items, "money", "var(--series-accessorial)", "bar",
-      "No accessorial charges found.");
+    // Days since delivery, bucketed
+    var withDays = unbilled.filter(function (r) { return !isEmpty(r.daysSinceDelivery) && !isNaN(r.daysSinceDelivery); });
+    var notYetDelivered = unbilled.length - withDays.length;
+    var agingItems = null;
+    if (withDays.length) {
+      agingItems = AGING_BUCKETS.map(function (bucket) {
+        var count = withDays.filter(function (r) { return bucket.test(Number(r.daysSinceDelivery)); }).length;
+        return { label: bucket.label, value: count };
+      });
+    }
+    var agingNote = document.getElementById("aging-note");
+    if (!unbilled.length) {
+      agingNote.textContent = "";
+    } else if (!withDays.length) {
+      agingNote.textContent = "Couldn't find a delivery-date field — check the Unbilled Loads tab below.";
+    } else {
+      agingNote.textContent = notYetDelivered
+        ? notYetDelivered + " unbilled load" + (notYetDelivered === 1 ? "" : "s") + " missing a delivery date (excluded)"
+        : "Since delivery, by bucket";
+    }
+    registerChart("aging", "chart-aging", "aging-note", agingItems, "count", "var(--series-aging)", "bar",
+      "No delivery-date field found on unbilled loads.");
 
-    // Top customers
-    var custGroup = groupSum(report.invoices, ["customerName", "customer", "client", "billTo"], ["totalAmount", "amount", "total"]);
-    document.getElementById("customer-note").textContent = custGroup.key ? "By " + custGroup.key : "Couldn't find a customer field on invoices — check the Invoices tab below.";
-    registerChart("customer", "chart-customer", "customer-note", custGroup.items, "money", "var(--series-customer)", "bar",
-      "No customer field found on invoices.");
+    // Unbilled loads by carrier
+    var carrierGroup = groupSum(unbilled, CARRIER_CANDIDATES, []);
+    document.getElementById("carrier-note").textContent = carrierGroup.key ? "By loads outstanding" : "Couldn't find a carrier field on unbilled loads — check the Unbilled Loads tab below.";
+    registerChart("carrier", "chart-carrier", "carrier-note", carrierGroup.items, "count", "var(--series-carrier)", "bar",
+      "No carrier field found on unbilled loads.");
+
+    // Unbilled loads by customer
+    var customerGroup = groupSum(unbilled, CUSTOMER_CANDIDATES, []);
+    document.getElementById("customer-note").textContent = customerGroup.key ? "By loads outstanding" : "Couldn't find a customer field on unbilled loads — check the Unbilled Loads tab below.";
+    registerChart("customer", "chart-customer", "customer-note", customerGroup.items, "count", "var(--series-customer)", "bar",
+      "No customer field found on unbilled loads.");
   }
 
   // ---------- top-of-page meta ----------
@@ -831,23 +928,34 @@
   }
 
   // ---------- top-level render ----------
+  var currentReport = null;
+
+  function applyFilterAndRender() {
+    if (!currentReport) return;
+    var filteredUnbilled = filterByStatus(currentReport.unbilled, statusFilter);
+    renderStatusFilter(currentReport.unbilled);
+    renderKpis(filteredUnbilled);
+    renderCharts(filteredUnbilled);
+    renderTabs(currentReport, filteredUnbilled);
+  }
+
   function render() {
-    var hasData = currentData && ((currentData.loads || []).length || (currentData.invoices || []).length || (currentData.accessorials || []).length);
+    var hasData = currentData && ((currentData.loads || []).length || (currentData.invoices || []).length || (currentData.accessorials || []).length || (currentData.unbilled || []).length);
     document.getElementById("empty-state").hidden = !!hasData;
     document.getElementById("report-view").hidden = !hasData;
     renderMeta(currentData || {}, currentSource);
-    if (!hasData) return;
+    if (!hasData) { currentReport = null; return; }
 
-    var report = {
+    currentReport = {
       meta: currentData.meta || {},
       summary: currentData.summary || [],
       loads: currentData.loads || [],
       invoices: currentData.invoices || [],
       accessorials: currentData.accessorials || [],
+      unbilled: currentData.unbilled || [],
     };
-    renderKpis(report);
-    renderCharts(report);
-    renderTabs(report);
+    statusFilter = "all";
+    applyFilterAndRender();
   }
 
   // ---------- file loading ----------

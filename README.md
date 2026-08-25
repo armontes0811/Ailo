@@ -3,9 +3,17 @@
 Pulls Loads and Invoices data out of [Alvys](https://alvys.com) (via their
 public API) and writes it to a multi-sheet Excel report:
 
-- **Summary** — headline KPIs for the date range (load/invoice counts, total
-  invoiced revenue, total accessorial charges).
-- **Loads** — load/shipment activity.
+- **Summary** — headline KPIs for the date range, including the unbilled
+  totals below.
+- **Unbilled Loads** — loads that have been delivered but are sitting in any
+  status other than "Invoiced" or "Complete" (i.e. not yet billed to the
+  customer or paid to the carrier), with days-since-delivery added. Loads
+  that haven't been delivered yet (open/covered/dispatched/in transit) are
+  excluded entirely.
+- **Unbilled by Carrier** / **Unbilled by Customer** — the above, grouped
+  with load counts, aging (avg/max days since delivery), and total rate
+  value.
+- **Loads** — full load/shipment activity (not filtered).
 - **Invoices** — financial/billing data.
 - **Accessorials** — invoice line items classified as accessorial charges
   (detention, lumper, stop-off, TONU, fuel surcharge, etc.), flattened out of
@@ -39,9 +47,12 @@ dashboard below.
 
 ## Dashboard
 
-`dashboard.html` is a self-contained visual dashboard (KPIs, revenue trend,
-load-status breakdown, accessorial charges by type, top customers) meant to
-be published as a Claude Artifact. It reads report data from a
+`dashboard.html` is a self-contained visual dashboard focused on unbilled
+loads: KPIs (unbilled count, avg/oldest days since delivery, unbilled value),
+a breakdown by status, an aging chart (days since delivery, bucketed), and
+breakdowns by carrier and customer — all filterable by status via the chips
+above the KPIs (e.g. view only "Delivered" vs. only "POD Received"). Meant to
+be published as a Claude Artifact; it reads report data from a
 `#report-data` script tag embedded in the page, with a manual
 file-load/drag-and-drop fallback for viewing an export ad hoc.
 
@@ -81,3 +92,13 @@ Claude in chat.
   erroring.
 - Currently the Alvys public API is read-only, so this only pulls data;
   it doesn't write anything back to Alvys.
+- The **unbilled loads** logic assumes a single `status` field (or one of
+  `STATUS_KEYS`' fallbacks) on each load, with pre-delivery values in
+  `PRE_DELIVERY_STATUSES` (open/covered/dispatched/in transit) and billed
+  values in `BILLED_STATUSES` (invoiced/complete) — anything else is treated
+  as unbilled. Carrier (`CARRIER_KEYS`), customer (`LOAD_CUSTOMER_KEYS`),
+  delivery date (`DELIVERY_DATE_KEYS`), and rate (`LOAD_RATE_KEYS`) field
+  names are similarly best-effort. **Run this against real Alvys data and
+  adjust those lists in `generate_report.py`** to match the actual status
+  values and field names — the dashboard will show "field not found" on any
+  chart it can't resolve.
