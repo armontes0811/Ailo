@@ -1,4 +1,14 @@
-"""Minimal client for the Alvys TMS public API (OAuth2 client-credentials flow)."""
+"""Client for the Alvys TMS public API (OAuth2 client-credentials flow).
+
+Confirmed against Alvys's Power BI integration docs
+(docs.alvys.com/docs/create-queries-and-retrieve-data-from-the-alvys-api):
+search endpoints are POST requests with a JSON body (page/pageSize plus
+filters), against https://integrations.alvys.com/api/p/v1/..., and return
+paginated results under an "Items" key. Response field names for Loads
+specifically weren't shown in that doc (only Drivers/Fuel examples expand
+their fields) -- confirm/adjust ALVYS_ITEMS_KEYS and the field-name
+constants in generate_report.py against a real response.
+"""
 
 import os
 import time
@@ -6,8 +16,10 @@ import time
 import requests
 
 TOKEN_URL = "https://auth.alvys.com/oauth/token"
-API_BASE_URL = "https://api.alvys.com/public"
+API_BASE_URL = "https://integrations.alvys.com/api/p/v1"
 AUDIENCE = "https://api.alvys.com/public/"
+
+MAX_PAGES = 50  # safety cap: 50 pages * pageSize records, in case pagination never terminates
 
 
 class AlvysAuthError(Exception):
@@ -47,29 +59,52 @@ class AlvysClient:
             self._fetch_token()
         return self._token
 
-    def get(self, path, params=None):
-        """Low-level GET against the Alvys public API. `path` is relative, e.g. '/loads/search'."""
-        headers = {"Authorization": f"Bearer {self._get_token()}"}
-        response = requests.get(f"{API_BASE_URL}{path}", headers=headers, params=params, timeout=30)
+    def post(self, path, body):
+        """Low-level POST against the Alvys public API. `path` is relative, e.g. '/loads/search'."""
+        headers = {
+            "Authorization": f"Bearer {self._get_token()}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(f"{API_BASE_URL}{path}", headers=headers, json=body, timeout=30)
         response.raise_for_status()
         return response.json()
 
-    def search_loads(self, start_date=None, end_date=None, **params):
-        # NOTE: endpoint path/params are best-effort from Alvys's public docs
-        # (docs.alvys.com/docs/create-queries-and-retrieve-data-from-the-alvys-api).
-        # Verify against a live call / the docs and adjust if the field names differ.
-        query = dict(params)
-        if start_date:
-            query["startDate"] = start_date
-        if end_date:
-            query["endDate"] = end_date
-        return self.get("/loads/search", params=query)
+    def _extract_items(self, payload):
+        for key in ("Items", "items", "Results", "results", "data"):
+            if isinstance(payload, dict) and key in payload:
+                return payload[key]
+        return payload if isinstance(payload, list) else []
 
-    def search_invoices(self, start_date=None, end_date=None, **params):
-        # NOTE: same caveat as search_loads -- verify against live docs/response shape.
-        query = dict(params)
-        if start_date:
-            query["startDate"] = start_date
-        if end_date:
-            query["endDate"] = end_date
-        return self.get("/invoices/search", params=query)
+    def _search_paginated(self, path, body, page_size):
+        items = []
+        for page in range(MAX_PAGES):
+            page_body = dict(body, page=page, pageSize=page_size)
+            payload = self.post(path, page_body)
+            page_items = self._extract_items(payload)
+            items.extend(page_items)
+            if len(page_items) < page_size:
+                break
+        return {"data": items}
+
+    def search_loads(self, start_date=None, end_date=None, status=None, page_size=200, **extra):
+        # NOTE: confirmed request shape from Alvys's Power BI docs example;
+        # response field names for individual loads are unconfirmed -- check
+        # a real response and adjust generate_report.py's field-name lists.
+        body = dict(extra)
+        if start_date or end_date:
+            body["dateRange"] = {"startDate": start_date, "endDate": end_date}
+        if status:
+            body["status"] = status
+        return self._search_paginated("/loads/search", body, page_size)
+
+    def search_invoices(self, start_date=None, end_date=None, status=None, page_size=100,
+                         date_field="invoicedDateRange", **extra):
+        # NOTE: same caveat as search_loads. Alvys's example shows both
+        # invoicedDateRange and paidDateRange -- date_field picks which one
+        # start_date/end_date apply to (defaults to invoicedDateRange).
+        body = dict(extra)
+        if start_date or end_date:
+            body[date_field] = {"start": start_date, "end": end_date}
+        if status:
+            body["status"] = status
+        return self._search_paginated("/invoices/search", body, page_size)
