@@ -138,13 +138,21 @@ def build_candidate_unbilled_df(client, loads_df):
 
 
 def attach_trip_and_carrier_info(client, candidate_df):
-    """Join Trip (carrier identity + CarrierPaidAt) and resolved carrier
-    Name onto each candidate load, by LoadNumber -> Trip.LoadNumber."""
+    """Join Trip (carrier identity, CarrierPaidAt, DueDate) and resolved
+    carrier Name onto each candidate load, by LoadNumber -> Trip.LoadNumber.
+
+    DueDate is Alvys's own computed carrier-payment due date (confirmed live:
+    DueDate = ReleasedAt + the carrier's actual payment term -- 30 days
+    standard, ~2 days for quickpay carriers) -- not a guess. A load is
+    "unpaid" once CarrierPaidAt is null, and specifically "overdue" once
+    that null CarrierPaidAt has also passed its DueDate.
+    """
     if candidate_df.empty or "LoadNumber" not in candidate_df.columns:
-        return candidate_df.assign(CarrierName=None, CarrierPaidAt=None, IsUnpaidToCarrier=False)
+        return candidate_df.assign(CarrierName=None, CarrierPaidAt=None, DueDate=None,
+                                    IsUnpaidToCarrier=False, IsOverdueToCarrier=False)
 
     trips_df = to_dataframe(client.search_trips_by_load_numbers(candidate_df["LoadNumber"].tolist()))
-    trip_cols = ["LoadNumber", "Carrier.Id", "CarrierPaidAt", "Carrier.TotalPayable.Amount"]
+    trip_cols = ["LoadNumber", "Carrier.Id", "CarrierPaidAt", "DueDate", "Carrier.TotalPayable.Amount"]
     for col in trip_cols:
         if col not in trips_df.columns:
             trips_df[col] = pd.NA
@@ -161,6 +169,8 @@ def attach_trip_and_carrier_info(client, candidate_df):
     merged["CarrierName"] = merged["Carrier.Id"].map(name_map)
 
     merged["IsUnpaidToCarrier"] = merged["Carrier.Id"].notna() & merged["CarrierPaidAt"].isna()
+    due_date = pd.to_datetime(merged["DueDate"], errors="coerce", utc=True)
+    merged["IsOverdueToCarrier"] = merged["IsUnpaidToCarrier"] & due_date.notna() & (due_date < pd.Timestamp.now(tz="UTC"))
     return merged
 
 
@@ -258,6 +268,7 @@ def build_summary_df(loads_df, invoices_df, accessorials_df, unbilled_df, start_
 
     uninvoiced_df = unbilled_df[unbilled_df.get("IsUninvoiced", False)] if "IsUninvoiced" in unbilled_df.columns else unbilled_df.iloc[0:0]
     unpaid_df = unbilled_df[unbilled_df.get("IsUnpaidToCarrier", False)] if "IsUnpaidToCarrier" in unbilled_df.columns else unbilled_df.iloc[0:0]
+    overdue_df = unbilled_df[unbilled_df.get("IsOverdueToCarrier", False)] if "IsOverdueToCarrier" in unbilled_df.columns else unbilled_df.iloc[0:0]
 
     avg_days = max_days = None
     if "daysSinceDelivery" in unbilled_df.columns:
@@ -268,6 +279,7 @@ def build_summary_df(loads_df, invoices_df, accessorials_df, unbilled_df, start_
 
     uninvoiced_value = pd.to_numeric(uninvoiced_df.get("CustomerRate.Amount"), errors="coerce").sum() if "CustomerRate.Amount" in uninvoiced_df.columns else None
     unpaid_value = pd.to_numeric(unpaid_df.get("Carrier.TotalPayable.Amount"), errors="coerce").sum() if "Carrier.TotalPayable.Amount" in unpaid_df.columns else None
+    overdue_value = pd.to_numeric(overdue_df.get("Carrier.TotalPayable.Amount"), errors="coerce").sum() if "Carrier.TotalPayable.Amount" in overdue_df.columns else None
 
     return pd.DataFrame([
         {"metric": "Start date", "value": start_date},
@@ -280,10 +292,12 @@ def build_summary_df(loads_df, invoices_df, accessorials_df, unbilled_df, start_
         {"metric": "Unbilled loads (uninvoiced or unpaid-to-carrier)", "value": len(unbilled_df)},
         {"metric": "Uninvoiced loads", "value": len(uninvoiced_df)},
         {"metric": "Unpaid-to-carrier loads", "value": len(unpaid_df)},
+        {"metric": "Overdue-to-carrier loads (past DueDate, unpaid)", "value": len(overdue_df)},
         {"metric": "Avg days since delivery (unbilled)", "value": avg_days},
         {"metric": "Oldest unbilled (days since delivery)", "value": max_days},
         {"metric": "Uninvoiced revenue at risk", "value": uninvoiced_value},
-        {"metric": "Unpaid carrier cost", "value": unpaid_value},
+        {"metric": "Unpaid carrier cost (within terms or overdue)", "value": unpaid_value},
+        {"metric": "Overdue carrier cost (past DueDate)", "value": overdue_value},
     ])
 
 

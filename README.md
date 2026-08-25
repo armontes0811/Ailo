@@ -33,8 +33,15 @@ isn't `Cancelled`. From there:
   `CarrierPaidAt` timestamp yet. Carrier identity comes from the Trip
   (`Trip.Carrier.Id`), not the Load — Alvys only exposes a carrier GUID on
   the Trip, so the name is resolved via a `/carriers/search` lookup.
-- These two flags are **independent, not combined** — a load can be
-  invoiced already but still unpaid to its carrier, or vice versa. The
+- **Overdue to carrier**: a stricter subset of unpaid-to-carrier — the
+  Trip's `DueDate` has passed. `DueDate` is Alvys's own computed carrier
+  payment due date, confirmed live to equal `ReleasedAt` + the carrier's
+  actual term (30 days standard, ~2 days for quickpay carriers) — most
+  unpaid-to-carrier loads are simply still within normal terms, not
+  overdue, which is why the dashboard features "overdue carrier cost"
+  rather than the much larger raw "unpaid" total.
+- These flags are **independent, not combined** — a load can be invoiced
+  already but still unpaid/overdue to its carrier, or vice versa. The
   dashboard filters on them separately.
 - `Admin`, `In Review`, and `Financed` statuses haven't been seen in
   practice; they're not specially classified (so they'd currently show up
