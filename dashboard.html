@@ -408,12 +408,15 @@
     In Transit). A load appears here if it's <strong>uninvoiced</strong> (Status
     isn't &ldquo;Invoiced&rdquo; or &ldquo;Completed&rdquo; &mdash; TONU loads are checked
     directly against invoice records instead, since TONU alone doesn't say
-    invoiced-or-not) and/or <strong>unpaid to carrier</strong> (its Trip has no
-    CarrierPaidAt timestamp yet). <strong>Overdue to carrier</strong> narrows that to
-    loads past their Trip's <code>DueDate</code> &mdash; Alvys's own computed carrier
-    payment due date (confirmed live: <code>ReleasedAt</code> + your actual term, 30
-    days standard or ~2 days for quickpay carriers), so most unpaid loads are simply
-    still within normal terms, not overdue. These filters are independent, not
+    invoiced-or-not) and/or unpaid to its carrier. The carrier side has two
+    distinct stages: <strong>not yet invoiced to carrier</strong> (the settlement is
+    still &ldquo;Open&rdquo; &mdash; no carrier invoice number yet, nothing sent to
+    Triumph Pay) and <strong>awaiting carrier payment</strong> (invoiced/sent to
+    Triumph, but its <code>CarrierPaidAt</code> is still null) &mdash;
+    <strong>overdue to carrier</strong> narrows the latter to loads past their Trip's
+    <code>DueDate</code>, Alvys's own computed due date (confirmed live:
+    <code>ReleasedAt</code> + your actual term, 30 days standard or ~2 days for
+    quickpay carriers). These filters are independent, not
     combined. Carrier identity/name comes from the Trip, not the Load. To refresh:
     run <code>python generate_report.py</code>, then
     <code>python build_dashboard.py alvys_report.json</code>, then republish this page.
@@ -654,7 +657,8 @@
   }
   function filterByFlag(unbilled, filter) {
     if (filter === "uninvoiced") return unbilled.filter(function (r) { return isTrue(r.IsUninvoiced); });
-    if (filter === "unpaid") return unbilled.filter(function (r) { return isTrue(r.IsUnpaidToCarrier); });
+    if (filter === "notYetInvoicedCarrier") return unbilled.filter(function (r) { return isTrue(r.IsNotYetInvoicedToCarrier); });
+    if (filter === "awaitingCarrier") return unbilled.filter(function (r) { return isTrue(r.IsAwaitingCarrierPayment); });
     if (filter === "overdue") return unbilled.filter(function (r) { return isTrue(r.IsOverdueToCarrier); });
     return unbilled;
   }
@@ -689,12 +693,14 @@
     wrap.appendChild(label);
 
     var uninvoicedCount = afterStatus.filter(function (r) { return isTrue(r.IsUninvoiced); }).length;
-    var unpaidCount = afterStatus.filter(function (r) { return isTrue(r.IsUnpaidToCarrier); }).length;
+    var notYetInvoicedCarrierCount = afterStatus.filter(function (r) { return isTrue(r.IsNotYetInvoicedToCarrier); }).length;
+    var awaitingCarrierCount = afterStatus.filter(function (r) { return isTrue(r.IsAwaitingCarrierPayment); }).length;
     var overdueCount = afterStatus.filter(function (r) { return isTrue(r.IsOverdueToCarrier); }).length;
 
     makeChip(wrap, "all", "All unbilled", afterStatus.length, flagFilter, function () { flagFilter = "all"; applyFilterAndRender(); });
     makeChip(wrap, "uninvoiced", "Uninvoiced", uninvoicedCount, flagFilter, function () { flagFilter = "uninvoiced"; applyFilterAndRender(); });
-    makeChip(wrap, "unpaid", "Unpaid to carrier", unpaidCount, flagFilter, function () { flagFilter = "unpaid"; applyFilterAndRender(); });
+    makeChip(wrap, "notYetInvoicedCarrier", "Not yet invoiced to carrier", notYetInvoicedCarrierCount, flagFilter, function () { flagFilter = "notYetInvoicedCarrier"; applyFilterAndRender(); });
+    makeChip(wrap, "awaitingCarrier", "Awaiting carrier payment", awaitingCarrierCount, flagFilter, function () { flagFilter = "awaitingCarrier"; applyFilterAndRender(); });
     makeChip(wrap, "overdue", "Overdue to carrier", overdueCount, flagFilter, function () { flagFilter = "overdue"; applyFilterAndRender(); });
   }
 
@@ -754,7 +760,8 @@
     wrap.innerHTML = "";
 
     var uninvoiced = unbilled.filter(function (r) { return isTrue(r.IsUninvoiced); });
-    var unpaid = unbilled.filter(function (r) { return isTrue(r.IsUnpaidToCarrier); });
+    var notYetInvoicedCarrier = unbilled.filter(function (r) { return isTrue(r.IsNotYetInvoicedToCarrier); });
+    var awaitingCarrier = unbilled.filter(function (r) { return isTrue(r.IsAwaitingCarrierPayment); });
     var overdue = unbilled.filter(function (r) { return isTrue(r.IsOverdueToCarrier); });
 
     var days = unbilled
@@ -768,7 +775,7 @@
     var overdueValue = overdue.reduce(function (sum, r) { return sum + toNumber(r["Carrier.TotalPayable.Amount"]); }, 0);
 
     var tiles = [
-      { label: "Unbilled loads", value: fmtNum(unbilled.length), sub: uninvoiced.length + " uninvoiced · " + unpaid.length + " unpaid to carrier" },
+      { label: "Unbilled loads", value: fmtNum(unbilled.length), sub: uninvoiced.length + " uninvoiced · " + notYetInvoicedCarrier.length + " not yet invoiced to carrier · " + awaitingCarrier.length + " awaiting carrier payment" },
       { label: "Uninvoiced revenue at risk", value: fmtMoney(uninvoicedValue), sub: fmtNum(uninvoiced.length) + " loads" },
       { label: "Overdue carrier cost", value: fmtMoney(overdueValue), sub: fmtNum(overdue.length) + " loads past due date" },
       { label: "Oldest unbilled", value: fmtDays(oldestDays), sub: "avg " + fmtDays(avgDays) },

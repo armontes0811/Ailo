@@ -6,10 +6,12 @@ Pulls Loads, Trips, Carriers, and Invoices out of [Alvys](https://alvys.com)
 to the customer, not yet paid to the carrier, or both.
 
 - **Summary** — headline KPIs: load/invoice counts, total invoiced revenue,
-  total accessorial charges, unbilled load counts (uninvoiced / unpaid-to-
-  carrier / either), aging, and $ at risk on each side.
+  total accessorial charges, unbilled load counts by stage (uninvoiced / not
+  yet invoiced to carrier / awaiting carrier payment / overdue), aging, and
+  $ at risk on each side.
 - **Unbilled Loads** — one row per in-scope load, with `IsUninvoiced`,
-  `IsUnpaidToCarrier`, resolved `CarrierName`, and `daysSinceDelivery`.
+  `IsNotYetInvoicedToCarrier`, `IsAwaitingCarrierPayment`,
+  `IsOverdueToCarrier`, resolved `CarrierName`, and `daysSinceDelivery`.
 - **Unbilled by Carrier** / **Unbilled by Customer** — the above, grouped
   with load counts, aging (avg/max days since delivery), and total value.
 - **Loads** — full load/shipment activity (not filtered).
@@ -29,20 +31,36 @@ isn't `Cancelled`. From there:
   or `Completed`. `TONU` loads are a special case — `TONU` alone doesn't
   tell you whether it was invoiced, so those are checked directly against
   `/invoices/search` by load number instead of by status.
-- **Unpaid to carrier**: the matching Trip (joined by `LoadNumber`) has no
-  `CarrierPaidAt` timestamp yet. Carrier identity comes from the Trip
-  (`Trip.Carrier.Id`), not the Load — Alvys only exposes a carrier GUID on
-  the Trip, so the name is resolved via a `/carriers/search` lookup.
-- **Overdue to carrier**: a stricter subset of unpaid-to-carrier — the
-  Trip's `DueDate` has passed. `DueDate` is Alvys's own computed carrier
-  payment due date, confirmed live to equal `ReleasedAt` + the carrier's
-  actual term (30 days standard, ~2 days for quickpay carriers) — most
-  unpaid-to-carrier loads are simply still within normal terms, not
-  overdue, which is why the dashboard features "overdue carrier cost"
-  rather than the much larger raw "unpaid" total.
-- These flags are **independent, not combined** — a load can be invoiced
-  already but still unpaid/overdue to its carrier, or vice versa. The
-  dashboard filters on them separately.
+- **Carrier payment has two distinct stages**, both joined via the matching
+  Trip (by `LoadNumber`) since Alvys tracks carrier settlement on the Trip,
+  not the Load:
+  - **Not yet invoiced to carrier**: `Carrier.CarrierInvoiceNumber` is null
+    — the settlement is still "Open"; nothing has been created/sent to
+    Triumph Pay yet. This is an internal processing backlog, not a Triumph
+    delay.
+  - **Awaiting carrier payment**: `Carrier.CarrierInvoiceNumber` is set
+    (sent to Triumph) but `CarrierPaidAt` is still null. **Overdue to
+    carrier** narrows this to loads whose Trip `DueDate` has passed —
+    confirmed live to equal `ReleasedAt` + the carrier's actual term (30
+    days standard, ~2 days for quickpay carriers).
+  - Getting this distinction right required a full pass with the account
+    owner: an earlier version conflated "not yet invoiced" with "overdue"
+    because `DueDate` gets pre-populated as an *estimate* even before an
+    invoice exists — checking `DueDate` alone, without confirming
+    `CarrierInvoiceNumber` is actually set, wrongly flagged loads that
+    hadn't even reached Triumph yet as "overdue."
+  - Carrier identity/name comes from the Trip (`Trip.Carrier.Id`), not the
+    Load — Alvys only exposes a carrier GUID there, so the name is resolved
+    via a `/carriers/search` lookup.
+- All of these flags are **independent, not combined** — a load can be
+  invoiced to the customer already but still stuck at any carrier-payment
+  stage, or vice versa. The dashboard filters on each separately.
+- **Timestamp parsing**: Alvys's timestamps have inconsistent fractional-
+  second precision across records (0, 6, or 7 digits). `pandas.to_datetime`'s
+  automatic format *inference* silently turns non-matching rows into `NaT`
+  under `errors="coerce"` instead of raising — confirmed live, this dropped
+  a real chunk of valid dates. Every date parse in `generate_report.py` uses
+  `format="ISO8601"` to avoid this; don't remove it.
 - `Admin`, `In Review`, and `Financed` statuses haven't been seen in
   practice; they're not specially classified (so they'd currently show up
   as uninvoiced by default) — adjust `BILLED_STATUSES`/`PRE_DELIVERY_STATUSES`
