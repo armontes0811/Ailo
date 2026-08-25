@@ -1,13 +1,16 @@
 """Client for the Alvys TMS public API (OAuth2 client-credentials flow).
 
-Confirmed against Alvys's Power BI integration docs
-(docs.alvys.com/docs/create-queries-and-retrieve-data-from-the-alvys-api):
-search endpoints are POST requests with a JSON body (page/pageSize plus
-filters), against https://integrations.alvys.com/api/p/v1/..., and return
-paginated results under an "Items" key. Response field names for Loads
-specifically weren't shown in that doc (only Drivers/Fuel examples expand
-their fields) -- confirm/adjust ALVYS_ITEMS_KEYS and the field-name
-constants in generate_report.py against a real response.
+Confirmed live against https://integrations.alvys.com/api/p/v1 (docs at
+docs.alvys.com/en/api/reference/...): search endpoints are POST requests
+with a JSON body (Page/PageSize plus filters), and return paginated results
+under an "Items" key. Field names on returned objects are PascalCase (e.g.
+"CustomerName", "DeliveredAt") -- pandas.json_normalize flattens nested
+objects to dotted paths (e.g. "CustomerRate.Amount", "Fleet.Name").
+
+Each search endpoint requires at least one filter field beyond
+Page/PageSize -- e.g. loads/trips need `status` (or another id-type filter),
+carriers need `ids`/`mcNumbers`/`dotNumbers`/`status`, invoices need a date
+range or `loadNumbers`/`customerId`/etc.
 """
 
 import os
@@ -20,6 +23,8 @@ API_BASE_URL = "https://integrations.alvys.com/api/p/v1"
 AUDIENCE = "https://api.alvys.com/public/"
 
 MAX_PAGES = 50  # safety cap: 50 pages * pageSize records, in case pagination never terminates
+BATCH_SIZE = 200  # Alvys's documented PageSize ceiling (and the Ids filter's, confirmed live)
+LOAD_NUMBERS_BATCH_SIZE = 50  # confirmed live: LoadNumbers filter rejects lists over 50
 
 
 class AlvysAuthError(Exception):
@@ -84,27 +89,50 @@ class AlvysClient:
             items.extend(page_items)
             if len(page_items) < page_size:
                 break
-        return {"data": items}
+        return items
+
+    def _search_batched(self, path, list_field, values, extra_body, page_size, batch_size=BATCH_SIZE):
+        """For endpoints whose filter is a list (LoadNumbers, Ids, ...) that may
+        exceed Alvys's per-request ceiling: chunk `values` and merge results."""
+        values = list(values)
+        if not values:
+            return []
+        items = []
+        for i in range(0, len(values), batch_size):
+            chunk = values[i:i + batch_size]
+            body = dict(extra_body, **{list_field: chunk})
+            items.extend(self._search_paginated(path, body, page_size))
+        return items
 
     def search_loads(self, start_date=None, end_date=None, status=None, page_size=200, **extra):
-        # NOTE: confirmed request shape from Alvys's Power BI docs example;
-        # response field names for individual loads are unconfirmed -- check
-        # a real response and adjust generate_report.py's field-name lists.
         body = dict(extra)
         if start_date or end_date:
             body["dateRange"] = {"startDate": start_date, "endDate": end_date}
         if status:
             body["status"] = status
-        return self._search_paginated("/loads/search", body, page_size)
+        return {"data": self._search_paginated("/loads/search", body, page_size)}
 
     def search_invoices(self, start_date=None, end_date=None, status=None, page_size=100,
                          date_field="invoicedDateRange", **extra):
-        # NOTE: same caveat as search_loads. Alvys's example shows both
-        # invoicedDateRange and paidDateRange -- date_field picks which one
-        # start_date/end_date apply to (defaults to invoicedDateRange).
+        # Alvys exposes both invoicedDateRange and paidDateRange -- date_field
+        # picks which one start_date/end_date apply to (defaults to invoiced).
         body = dict(extra)
         if start_date or end_date:
             body[date_field] = {"start": start_date, "end": end_date}
         if status:
             body["status"] = status
-        return self._search_paginated("/invoices/search", body, page_size)
+        return {"data": self._search_paginated("/invoices/search", body, page_size)}
+
+    def search_invoices_by_load_numbers(self, load_numbers, page_size=100):
+        items = self._search_batched("/invoices/search", "loadNumbers", load_numbers, {}, page_size,
+                                      batch_size=LOAD_NUMBERS_BATCH_SIZE)
+        return {"data": items}
+
+    def search_trips_by_load_numbers(self, load_numbers, page_size=200):
+        items = self._search_batched("/trips/search", "loadNumbers", load_numbers, {}, page_size,
+                                      batch_size=LOAD_NUMBERS_BATCH_SIZE)
+        return {"data": items}
+
+    def search_carriers_by_ids(self, ids, page_size=200):
+        items = self._search_batched("/carriers/search", "ids", ids, {}, page_size)
+        return {"data": items}
