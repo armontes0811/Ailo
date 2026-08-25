@@ -2,6 +2,7 @@
 covering load/shipment activity, financial/billing, and accessorial charges."""
 
 import argparse
+import json
 import sys
 from datetime import date, timedelta
 
@@ -33,12 +34,25 @@ def parse_args():
     parser.add_argument("--start-date", default=(date.today() - timedelta(days=30)).isoformat())
     parser.add_argument("--end-date", default=date.today().isoformat())
     parser.add_argument("--output", default="alvys_report.xlsx")
+    parser.add_argument(
+        "--json-output",
+        default=None,
+        help="Path for the JSON export used by the dashboard artifact "
+        "(defaults to --output with a .json extension).",
+    )
     return parser.parse_args()
 
 
 def to_dataframe(payload):
     rows = payload.get("data", payload) if isinstance(payload, dict) else payload
     return pd.json_normalize(rows)
+
+
+def to_records(df):
+    """DataFrame -> list of JSON-safe dicts (NaN becomes null)."""
+    if df.empty:
+        return []
+    return json.loads(df.to_json(orient="records", date_format="iso"))
 
 
 def _find_line_items(invoice):
@@ -140,7 +154,28 @@ def main():
         invoices_df.to_excel(writer, sheet_name="Invoices", index=False)
         accessorials_df.to_excel(writer, sheet_name="Accessorials", index=False)
 
+    json_output = args.json_output or (
+        args.output[:-5] + ".json" if args.output.endswith(".xlsx") else args.output + ".json"
+    )
+    with open(json_output, "w") as f:
+        json.dump(
+            {
+                "meta": {
+                    "startDate": args.start_date,
+                    "endDate": args.end_date,
+                    "generatedAt": date.today().isoformat(),
+                },
+                "summary": to_records(summary_df),
+                "loads": to_records(loads_df),
+                "invoices": to_records(invoices_df),
+                "accessorials": to_records(accessorials_df),
+            },
+            f,
+            indent=2,
+        )
+
     print(f"Report written to {args.output}")
+    print(f"JSON export (for the dashboard artifact) written to {json_output}")
     print(f"  Loads: {len(loads_df)} rows")
     print(f"  Invoices: {len(invoices_df)} rows")
     print(f"  Accessorial line items: {len(accessorials_df)} rows")

@@ -1,0 +1,898 @@
+<title>Alvys Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef0ec;
+    --surface: #ffffff;
+    --surface-2: #f5f6f2;
+    --ink: #12181a;
+    --ink-secondary: #5c6560;
+    --muted: #8b938c;
+    --border: rgba(18, 24, 26, 0.12);
+    --border-strong: rgba(18, 24, 26, 0.22);
+    --accent: #c1531f;
+    --accent-ink: #fff7f0;
+    --accent-soft: #f3e1d4;
+    --good: #0ca30c;
+    --chart-surface: #fcfcfb;
+    --grid-line: #e1e0d9;
+    --series-revenue: #2a78d6;
+    --series-status: #1baf7a;
+    --series-accessorial: #eb6834;
+    --series-customer: #4a3aa7;
+    --shadow: 0 1px 2px rgba(18, 24, 26, 0.04), 0 8px 24px -12px rgba(18, 24, 26, 0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d0f0e;
+      --surface: #171a18;
+      --surface-2: #1e2220;
+      --ink: #f2f4f0;
+      --ink-secondary: #a9b0aa;
+      --muted: #7d857f;
+      --border: rgba(255, 255, 255, 0.12);
+      --border-strong: rgba(255, 255, 255, 0.22);
+      --accent: #e2803f;
+      --accent-ink: #1a1006;
+      --accent-soft: rgba(226, 128, 63, 0.18);
+      --good: #35c235;
+      --chart-surface: #1a1a19;
+      --grid-line: #2c2c2a;
+      --series-revenue: #3987e5;
+      --series-status: #199e70;
+      --series-accessorial: #d95926;
+      --series-customer: #9085e9;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0f0e;
+    --surface: #171a18;
+    --surface-2: #1e2220;
+    --ink: #f2f4f0;
+    --ink-secondary: #a9b0aa;
+    --muted: #7d857f;
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --accent: #e2803f;
+    --accent-ink: #1a1006;
+    --accent-soft: rgba(226, 128, 63, 0.18);
+    --good: #35c235;
+    --chart-surface: #1a1a19;
+    --grid-line: #2c2c2a;
+    --series-revenue: #3987e5;
+    --series-status: #199e70;
+    --series-accessorial: #d95926;
+    --series-customer: #9085e9;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { color-scheme: light dark; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace; font-variant-numeric: tabular-nums; }
+
+  .app { max-width: 1180px; margin: 0 auto; padding: 28px 24px 64px; }
+
+  a { color: inherit; }
+  button { font: inherit; color: inherit; }
+
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .topbar .titles { display: flex; flex-direction: column; gap: 6px; }
+  .kicker {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+  .pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+  .pill .num { color: var(--ink); }
+
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--ink);
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:focus-visible, a:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.05); color: var(--accent-ink); }
+  .link-btn {
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: var(--ink-secondary); font-size: 13px; text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .link-btn:hover { color: var(--accent); }
+  input[type="file"] { display: none; }
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .kpi .label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  .kpi .value {
+    font-size: clamp(22px, 2.4vw, 28px);
+    font-weight: 600;
+    margin-top: 6px;
+    letter-spacing: -0.01em;
+  }
+  .kpi .sub { font-size: 12px; color: var(--ink-secondary); margin-top: 4px; }
+
+  .charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px 16px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 220px;
+  }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-card > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .chart-card h2 { margin: 0; font-size: 15px; font-weight: 700; }
+  .chart-card .chart-note { font-size: 12px; color: var(--muted); margin: -6px 0 0; }
+  .chart-body { flex: 1; display: flex; flex-direction: column; }
+  .empty-chart {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px;
+  }
+
+  .bar-row { display: grid; grid-template-columns: 120px 1fr 74px; align-items: center; gap: 10px; padding: 5px 0; cursor: default; }
+  .bar-row .bar-label { font-size: 12.5px; color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { position: relative; height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+  .bar-row .bar-value { font-size: 12.5px; text-align: right; }
+  .bar-row:hover .bar-track { outline: 2px solid var(--border-strong); outline-offset: 1px; }
+
+  .linechart { width: 100%; height: 100%; overflow: visible; }
+  .linechart .gridline { stroke: var(--grid-line); stroke-width: 1; }
+  .linechart .axis-label { fill: var(--muted); font-size: 10.5px; font-family: "IBM Plex Mono", monospace; }
+  .linechart .area { opacity: 0.16; }
+  .linechart .line { fill: none; stroke-width: 2; }
+  .linechart .dot { stroke: var(--surface); stroke-width: 2; }
+  .linechart .dot:hover, .linechart .dot.active { r: 6; }
+  .linechart .end-label { font-size: 12px; font-weight: 600; font-family: "IBM Plex Mono", monospace; }
+  .linechart .hover-line { stroke: var(--border-strong); stroke-width: 1; }
+
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--ink);
+    color: var(--bg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    z-index: 50;
+    max-width: 220px;
+    box-shadow: var(--shadow);
+    transform: translate(-50%, -100%);
+  }
+  :root:not([data-theme="light"]) .tooltip { background: var(--surface-2); color: var(--ink); border: 1px solid var(--border-strong); }
+  :root[data-theme="dark"] .tooltip { background: var(--surface-2); color: var(--ink); border: 1px solid var(--border-strong); }
+  .tooltip strong { font-family: "IBM Plex Mono", monospace; }
+
+  .raw-data {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .tabs { display: flex; gap: 2px; padding: 10px 14px 0; border-bottom: 1px solid var(--border); }
+  .tab {
+    background: none; border: none; padding: 10px 14px; font-size: 13px; font-weight: 600;
+    color: var(--ink-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .table-wrap { overflow-x: auto; max-height: 360px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th {
+    position: sticky; top: 0; background: var(--surface-2); text-align: left; padding: 8px 14px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 7px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; color: var(--ink-secondary); }
+  tbody tr:nth-child(even) { background: var(--surface-2); }
+  td.num-cell, th.num-cell { text-align: right; font-family: "IBM Plex Mono", monospace; }
+
+  .empty-state {
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: 14px;
+    padding: 56px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .empty-state h2 { margin: 0; font-size: 19px; }
+  .empty-state p { margin: 0; max-width: 480px; color: var(--ink-secondary); font-size: 14px; line-height: 1.6; }
+  .drop-zone {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .drop-zone.drag-over { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  footer.note {
+    margin-top: 28px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.7;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  footer.note code {
+    font-family: "IBM Plex Mono", monospace;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  @media (max-width: 760px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+    .bar-row { grid-template-columns: 90px 1fr 60px; }
+  }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="titles">
+      <span class="kicker">Alvys TMS &middot; Loads &amp; Invoices</span>
+      <h1>Freight report dashboard</h1>
+    </div>
+    <div class="meta-row" id="meta-row"></div>
+  </header>
+
+  <div class="controls" style="margin-bottom: 22px;">
+    <button class="btn" id="choose-file-btn">Load a report file&hellip;</button>
+    <input type="file" id="file-input" accept="application/json,.json">
+    <button class="link-btn" id="use-published-btn" hidden>Use published report instead</button>
+    <span class="drop-zone" id="drop-zone">or drop a <code>.json</code> export here</span>
+  </div>
+
+  <div id="empty-state" class="empty-state" hidden>
+    <h2>No report loaded yet</h2>
+    <p>
+      This dashboard renders the JSON export from <strong>generate_report.py</strong>.
+      Ask Claude to &ldquo;refresh the Alvys dashboard&rdquo; in a session that can reach
+      Alvys's API, or load an export file yourself with the button above.
+    </p>
+  </div>
+
+  <main id="report-view" hidden>
+    <section class="kpis" id="kpis"></section>
+
+    <section class="charts">
+      <article class="chart-card" data-key="revenue">
+        <header><h2>Revenue trend</h2><button class="link-btn" data-toggle="revenue">Table</button></header>
+        <p class="chart-note" id="revenue-note"></p>
+        <div class="chart-body" id="chart-revenue"></div>
+      </article>
+
+      <article class="chart-card" data-key="status">
+        <header><h2>Loads by status</h2><button class="link-btn" data-toggle="status">Table</button></header>
+        <p class="chart-note" id="status-note"></p>
+        <div class="chart-body" id="chart-status"></div>
+      </article>
+
+      <article class="chart-card" data-key="accessorial">
+        <header><h2>Accessorial charges by type</h2><button class="link-btn" data-toggle="accessorial">Table</button></header>
+        <p class="chart-note" id="accessorial-note"></p>
+        <div class="chart-body" id="chart-accessorial"></div>
+      </article>
+
+      <article class="chart-card" data-key="customer">
+        <header><h2>Top customers by revenue</h2><button class="link-btn" data-toggle="customer">Table</button></header>
+        <p class="chart-note" id="customer-note"></p>
+        <div class="chart-body" id="chart-customer"></div>
+      </article>
+    </section>
+
+    <section class="raw-data">
+      <div class="tabs" role="tablist" id="raw-tabs"></div>
+      <div class="table-wrap"><table id="raw-table"></table></div>
+    </section>
+  </main>
+
+  <footer class="note">
+    Field names for accessorial charge classification and revenue dates are best-effort
+    (see <code>LINE_ITEM_KEYS</code> / <code>ACCESSORIAL_KEYWORDS</code> in
+    <code>generate_report.py</code>) &mdash; if a chart below shows &ldquo;field not found,&rdquo;
+    check the raw data tables for the real column name and have it added to the script.
+    To refresh: run <code>python generate_report.py</code>, then
+    <code>python build_dashboard.py alvys_report.json</code>, then republish this page.
+  </footer>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<script id="report-data" type="application/json">null</script>
+<script>
+(function () {
+  "use strict";
+
+  var PUBLISHED_DATA = (function () {
+    var el = document.getElementById("report-data");
+    try {
+      var parsed = JSON.parse(el.textContent);
+      return parsed;
+    } catch (e) { return null; }
+  })();
+
+  var STORAGE_KEY = "alvys-dashboard-override";
+  var currentData = PUBLISHED_DATA;
+  var currentSource = "published";
+  var chartData = {}; // key -> {items, valueUnit} for table toggles
+
+  function readOverride() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function writeOverride(data) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
+  }
+  function clearOverride() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  }
+
+  var override = readOverride();
+  if (override) { currentData = override; currentSource = "local"; }
+
+  // ---------- helpers ----------
+  function fmtMoney(n) {
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    return "$" + Math.round(n).toLocaleString("en-US");
+  }
+  function fmtNum(n) {
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    return Number(n).toLocaleString("en-US");
+  }
+  function fmtPct(n) {
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    return (n * 100).toFixed(1) + "%";
+  }
+  function isEmpty(v) { return v === null || v === undefined || v === ""; }
+
+  function resolveKey(records, candidates) {
+    for (var i = 0; i < candidates.length; i++) {
+      var key = candidates[i];
+      for (var j = 0; j < records.length; j++) {
+        if (!isEmpty(records[j][key])) return key;
+      }
+    }
+    return null;
+  }
+
+  function toNumber(v) {
+    var n = typeof v === "string" ? parseFloat(v.replace(/[^0-9.\-]/g, "")) : v;
+    return typeof n === "number" && !isNaN(n) ? n : 0;
+  }
+
+  function groupSum(records, keyCandidates, valueCandidates) {
+    var key = resolveKey(records, keyCandidates);
+    var valueKey = resolveKey(records, valueCandidates);
+    if (!key) return { items: null, key: null, valueKey: valueKey };
+    var totals = {};
+    records.forEach(function (r) {
+      var label = isEmpty(r[key]) ? "(unspecified)" : String(r[key]);
+      var amount = valueKey ? toNumber(r[valueKey]) : 1;
+      totals[label] = (totals[label] || 0) + amount;
+    });
+    var items = Object.keys(totals).map(function (label) { return { label: label, value: totals[label] }; });
+    items.sort(function (a, b) { return b.value - a.value; });
+    return { items: items, key: key, valueKey: valueKey };
+  }
+
+  function monthLabel(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+  }
+  function monthSortKey(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
+  function svgEl(tag, attrs) {
+    var el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  var tooltip = document.getElementById("tooltip");
+  function showTooltip(evt, html) {
+    tooltip.innerHTML = html;
+    tooltip.hidden = false;
+    positionTooltip(evt);
+  }
+  function positionTooltip(evt) {
+    var x = evt.clientX, y = evt.clientY;
+    tooltip.style.left = x + "px";
+    tooltip.style.top = (y - 12) + "px";
+  }
+  function hideTooltip() { tooltip.hidden = true; }
+
+  // ---------- bar chart ----------
+  function renderBarChart(containerId, items, color, formatValue, emptyMessage) {
+    var container = document.getElementById(containerId);
+    container.innerHTML = "";
+    if (!items || items.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "empty-chart";
+      empty.textContent = emptyMessage;
+      container.appendChild(empty);
+      return;
+    }
+    var top = items.slice(0, 8);
+    var max = Math.max.apply(null, top.map(function (i) { return i.value; })) || 1;
+    top.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "bar-row";
+
+      var label = document.createElement("span");
+      label.className = "bar-label";
+      label.textContent = item.label;
+      label.title = item.label;
+
+      var track = document.createElement("div");
+      track.className = "bar-track";
+      var fill = document.createElement("div");
+      fill.className = "bar-fill";
+      fill.style.width = Math.max(2, (item.value / max) * 100) + "%";
+      fill.style.background = color;
+      track.appendChild(fill);
+
+      var value = document.createElement("span");
+      value.className = "bar-value num";
+      value.textContent = formatValue(item.value);
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(value);
+
+      row.addEventListener("mousemove", function (evt) {
+        showTooltip(evt, item.label + "<br><strong>" + formatValue(item.value) + "</strong>");
+      });
+      row.addEventListener("mouseleave", hideTooltip);
+
+      container.appendChild(row);
+    });
+  }
+
+  // ---------- line chart ----------
+  function renderLineChart(containerId, points, color, emptyMessage) {
+    var container = document.getElementById(containerId);
+    container.innerHTML = "";
+    if (!points || points.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "empty-chart";
+      empty.textContent = emptyMessage;
+      container.appendChild(empty);
+      return;
+    }
+    var width = 480, height = 180, padL = 54, padR = 16, padT = 16, padB = 26;
+    var innerW = width - padL - padR, innerH = height - padT - padB;
+    var max = Math.max.apply(null, points.map(function (p) { return p.value; })) * 1.15 || 1;
+    var min = 0;
+
+    var svg = svgEl("svg", { class: "linechart", viewBox: "0 0 " + width + " " + height, preserveAspectRatio: "xMidYMid meet" });
+
+    function xAt(i) { return padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW); }
+    function yAt(v) { return padT + innerH - ((v - min) / (max - min)) * innerH; }
+
+    [0, 0.5, 1].forEach(function (t) {
+      var y = padT + innerH * (1 - t);
+      svg.appendChild(svgEl("line", { class: "gridline", x1: padL, x2: width - padR, y1: y, y2: y }));
+      var lbl = svgEl("text", { class: "axis-label", x: padL - 8, y: y + 3, "text-anchor": "end" });
+      lbl.textContent = fmtMoney(min + (max - min) * t);
+      svg.appendChild(lbl);
+    });
+
+    var linePath = "", areaPath = "";
+    points.forEach(function (p, i) {
+      var x = xAt(i), y = yAt(p.value);
+      linePath += (i === 0 ? "M" : "L") + x + "," + y + " ";
+      areaPath += (i === 0 ? "M" + x + "," + yAt(min) + " L" : "L") + x + "," + y + " ";
+    });
+    areaPath += "L" + xAt(points.length - 1) + "," + yAt(min) + " Z";
+
+    svg.appendChild(svgEl("path", { class: "area", d: areaPath, fill: color }));
+    svg.appendChild(svgEl("path", { class: "line", d: linePath, stroke: color }));
+
+    points.forEach(function (p, i) {
+      var x = xAt(i), y = yAt(p.value);
+      var isLast = i === points.length - 1;
+      var dot = svgEl("circle", { class: "dot", cx: x, cy: y, r: isLast ? 5 : 3.5, fill: color });
+      svg.appendChild(dot);
+      dot.addEventListener("mousemove", function (evt) {
+        showTooltip(evt, p.label + "<br><strong>" + fmtMoney(p.value) + "</strong>");
+      });
+      dot.addEventListener("mouseleave", hideTooltip);
+
+      var xlbl = svgEl("text", { class: "axis-label", x: x, y: height - 6, "text-anchor": "middle" });
+      xlbl.textContent = p.shortLabel || p.label;
+      svg.appendChild(xlbl);
+
+      if (isLast) {
+        var endLbl = svgEl("text", { class: "end-label", x: Math.min(x, width - padR - 6), y: y - 12, "text-anchor": "end", fill: color });
+        endLbl.textContent = fmtMoney(p.value);
+        svg.appendChild(endLbl);
+      }
+    });
+
+    container.appendChild(svg);
+  }
+
+  // ---------- table view toggle ----------
+  function renderTableView(containerId, items, formatValue) {
+    var container = document.getElementById(containerId);
+    container.innerHTML = "";
+    var table = document.createElement("table");
+    var thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>Label</th><th class=\"num-cell\">Value</th></tr>";
+    var tbody = document.createElement("tbody");
+    (items || []).forEach(function (item) {
+      var tr = document.createElement("tr");
+      var td1 = document.createElement("td");
+      td1.textContent = item.label;
+      var td2 = document.createElement("td");
+      td2.className = "num-cell num";
+      td2.textContent = formatValue(item.value);
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  document.querySelectorAll("[data-toggle]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var key = btn.getAttribute("data-toggle");
+      var entry = chartData[key];
+      if (!entry) return;
+      entry.showingTable = !entry.showingTable;
+      btn.textContent = entry.showingTable ? "Chart" : "Table";
+      if (entry.showingTable) {
+        renderTableView(entry.containerId, entry.items, entry.formatValue);
+      } else {
+        entry.render();
+      }
+    });
+  });
+
+  // ---------- raw data tabs ----------
+  var RAW_TABS = [
+    { key: "summary", label: "Summary" },
+    { key: "loads", label: "Loads" },
+    { key: "invoices", label: "Invoices" },
+    { key: "accessorials", label: "Accessorials" },
+  ];
+  var activeTab = "summary";
+
+  function renderRawTable(records) {
+    var table = document.getElementById("raw-table");
+    table.innerHTML = "";
+    if (!records || records.length === 0) {
+      var empty = document.createElement("caption");
+      empty.style.padding = "24px";
+      empty.style.color = "var(--muted)";
+      empty.textContent = "No rows.";
+      table.appendChild(empty);
+      return;
+    }
+    var columns = Object.keys(records[0]);
+    var thead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    columns.forEach(function (col) {
+      var th = document.createElement("th");
+      th.textContent = col;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+
+    var tbody = document.createElement("tbody");
+    records.slice(0, 50).forEach(function (record) {
+      var tr = document.createElement("tr");
+      columns.forEach(function (col) {
+        var td = document.createElement("td");
+        var val = record[col];
+        if (val !== null && typeof val === "object") val = JSON.stringify(val);
+        td.textContent = isEmpty(val) ? "—" : String(val);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+  }
+
+  function renderTabs(report) {
+    var wrap = document.getElementById("raw-tabs");
+    wrap.innerHTML = "";
+    RAW_TABS.forEach(function (tab) {
+      var btn = document.createElement("button");
+      btn.className = "tab";
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", String(tab.key === activeTab));
+      btn.textContent = tab.label + " (" + ((report[tab.key] || []).length) + ")";
+      btn.addEventListener("click", function () {
+        activeTab = tab.key;
+        renderTabs(report);
+        renderRawTable(report[tab.key]);
+      });
+      wrap.appendChild(btn);
+    });
+    renderRawTable(report[activeTab]);
+  }
+
+  // ---------- KPIs ----------
+  function summaryMetric(summary, name) {
+    var row = (summary || []).find(function (r) { return r.metric === name; });
+    return row ? row.value : null;
+  }
+
+  function renderKpis(report) {
+    var wrap = document.getElementById("kpis");
+    wrap.innerHTML = "";
+    var revenue = summaryMetric(report.summary, "Total invoiced revenue");
+    var accessorialTotal = summaryMetric(report.summary, "Total accessorial charges");
+    var share = revenue ? (accessorialTotal || 0) / revenue : null;
+
+    var tiles = [
+      { label: "Loads", value: fmtNum(report.loads.length) },
+      { label: "Invoices", value: fmtNum(report.invoices.length) },
+      { label: "Total invoiced revenue", value: fmtMoney(revenue) },
+      { label: "Accessorial share of revenue", value: fmtPct(share), sub: fmtMoney(accessorialTotal) + " total" },
+    ];
+    tiles.forEach(function (t) {
+      var card = document.createElement("div");
+      card.className = "kpi";
+      card.innerHTML =
+        "<div class=\"label\"></div><div class=\"value num\"></div>" + (t.sub ? "<div class=\"sub num\"></div>" : "");
+      card.querySelector(".label").textContent = t.label;
+      card.querySelector(".value").textContent = t.value;
+      if (t.sub) card.querySelector(".sub").textContent = t.sub;
+      wrap.appendChild(card);
+    });
+  }
+
+  // ---------- chart wiring ----------
+  function registerChart(key, containerId, noteId, items, valueKind, color, kind, emptyMessage, points) {
+    var formatValue = valueKind === "money" ? fmtMoney : fmtNum;
+    function doRender() {
+      if (kind === "line") renderLineChart(containerId, points, color, emptyMessage);
+      else renderBarChart(containerId, items, color, formatValue, emptyMessage);
+    }
+    chartData[key] = { containerId: containerId, items: items, formatValue: formatValue, showingTable: false, render: doRender };
+    doRender();
+  }
+
+  function renderCharts(report) {
+    // Revenue trend
+    var dateKey = resolveKey(report.invoices, ["invoiceDate", "date", "issueDate", "billDate", "createdAt", "created"]);
+    var amountKey = resolveKey(report.invoices, ["totalAmount", "amount", "total"]);
+    var revenueNote = document.getElementById("revenue-note");
+    var points = null;
+    if (dateKey && amountKey) {
+      var byMonth = {};
+      report.invoices.forEach(function (inv) {
+        var label = monthLabel(inv[dateKey]);
+        if (!label) return;
+        var sortKey = monthSortKey(inv[dateKey]);
+        byMonth[sortKey] = byMonth[sortKey] || { label: label, value: 0 };
+        byMonth[sortKey].value += toNumber(inv[amountKey]);
+      });
+      var keys = Object.keys(byMonth).sort();
+      points = keys.map(function (k) { return byMonth[k]; });
+      revenueNote.textContent = points.length ? "By " + dateKey + " (" + amountKey + ")" : "";
+    } else {
+      revenueNote.textContent = "Couldn't find a date field on invoices — check the Invoices tab below for the real column name.";
+    }
+    registerChart("revenue", "chart-revenue", "revenue-note", null, "money", "var(--series-revenue)", "line",
+      "No date field found on invoices.", points);
+
+    // Load status
+    var statusGroup = groupSum(report.loads, ["status", "loadStatus", "currentStatus"], []);
+    document.getElementById("status-note").textContent = statusGroup.key ? "By " + statusGroup.key : "Couldn't find a status field on loads — check the Loads tab below.";
+    registerChart("status", "chart-status", "status-note", statusGroup.items, "count", "var(--series-status)", "bar",
+      "No status field found on loads.");
+
+    // Accessorials by type
+    var accGroup = groupSum(report.accessorials, ["type", "chargeType", "category"], ["amount", "total"]);
+    document.getElementById("accessorial-note").textContent = accGroup.key ? "By " + accGroup.key : (report.accessorials.length ? "Couldn't find a charge-type field — check the Accessorials tab below." : "No accessorial line items in this report.");
+    registerChart("accessorial", "chart-accessorial", "accessorial-note", accGroup.items, "money", "var(--series-accessorial)", "bar",
+      "No accessorial charges found.");
+
+    // Top customers
+    var custGroup = groupSum(report.invoices, ["customerName", "customer", "client", "billTo"], ["totalAmount", "amount", "total"]);
+    document.getElementById("customer-note").textContent = custGroup.key ? "By " + custGroup.key : "Couldn't find a customer field on invoices — check the Invoices tab below.";
+    registerChart("customer", "chart-customer", "customer-note", custGroup.items, "money", "var(--series-customer)", "bar",
+      "No customer field found on invoices.");
+  }
+
+  // ---------- top-of-page meta ----------
+  function renderMeta(report, source) {
+    var wrap = document.getElementById("meta-row");
+    wrap.innerHTML = "";
+    var meta = report.meta || {};
+    if (meta.startDate && meta.endDate) {
+      var range = document.createElement("span");
+      range.className = "pill";
+      range.textContent = meta.startDate + " → " + meta.endDate;
+      wrap.appendChild(range);
+    }
+    if (meta.generatedAt) {
+      var gen = document.createElement("span");
+      gen.className = "pill";
+      gen.innerHTML = "Generated <span class=\"num\"></span>";
+      gen.querySelector(".num").textContent = meta.generatedAt;
+      wrap.appendChild(gen);
+    }
+    var badge = document.createElement("span");
+    badge.className = "pill accent";
+    badge.textContent = source === "local" ? "Local preview (only visible to you)" : "Published report";
+    wrap.appendChild(badge);
+
+    document.getElementById("use-published-btn").hidden = source !== "local" || !PUBLISHED_DATA;
+  }
+
+  // ---------- top-level render ----------
+  function render() {
+    var hasData = currentData && ((currentData.loads || []).length || (currentData.invoices || []).length || (currentData.accessorials || []).length);
+    document.getElementById("empty-state").hidden = !!hasData;
+    document.getElementById("report-view").hidden = !hasData;
+    renderMeta(currentData || {}, currentSource);
+    if (!hasData) return;
+
+    var report = {
+      meta: currentData.meta || {},
+      summary: currentData.summary || [],
+      loads: currentData.loads || [],
+      invoices: currentData.invoices || [],
+      accessorials: currentData.accessorials || [],
+    };
+    renderKpis(report);
+    renderCharts(report);
+    renderTabs(report);
+  }
+
+  // ---------- file loading ----------
+  function loadFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var parsed = JSON.parse(reader.result);
+        currentData = parsed;
+        currentSource = "local";
+        writeOverride(parsed);
+        render();
+      } catch (e) {
+        alert("That file isn't valid JSON from generate_report.py: " + e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  document.getElementById("choose-file-btn").addEventListener("click", function () {
+    document.getElementById("file-input").click();
+  });
+  document.getElementById("file-input").addEventListener("change", function (evt) {
+    if (evt.target.files[0]) loadFile(evt.target.files[0]);
+  });
+  document.getElementById("use-published-btn").addEventListener("click", function () {
+    clearOverride();
+    currentData = PUBLISHED_DATA;
+    currentSource = "published";
+    render();
+  });
+
+  var dropZone = document.getElementById("drop-zone");
+  ["dragenter", "dragover"].forEach(function (evtName) {
+    dropZone.addEventListener(evtName, function (e) { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    document.body.addEventListener(evtName, function (e) { e.preventDefault(); });
+  });
+  ["dragleave", "drop"].forEach(function (evtName) {
+    dropZone.addEventListener(evtName, function (e) { e.preventDefault(); dropZone.classList.remove("drag-over"); });
+  });
+  dropZone.addEventListener("drop", function (e) {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+
+  render();
+})();
+</script>

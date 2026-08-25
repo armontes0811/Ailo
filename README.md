@@ -33,7 +33,30 @@ python generate_report.py --start-date 2026-07-01 --end-date 2026-07-31 --output
 ```
 
 All arguments are optional; by default it pulls the last 30 days into
-`alvys_report.xlsx` in the current directory.
+`alvys_report.xlsx` in the current directory. This also writes a JSON export
+(`july_report.json` in the example above) with the same data, for the
+dashboard below.
+
+## Dashboard
+
+`dashboard.html` is a self-contained visual dashboard (KPIs, revenue trend,
+load-status breakdown, accessorial charges by type, top customers) meant to
+be published as a Claude Artifact. It reads report data from a
+`#report-data` script tag embedded in the page, with a manual
+file-load/drag-and-drop fallback for viewing an export ad hoc.
+
+To refresh the published dashboard with new data:
+
+```
+python generate_report.py --start-date ... --end-date ...
+python build_dashboard.py alvys_report.json
+```
+
+Then ask Claude to republish `dashboard.html` to the same Artifact URL. This
+only works from a session that can actually reach Alvys's API (some sandboxed
+environments block outbound access to `auth.alvys.com` / `api.alvys.com` by
+policy) — "refresh the dashboard" is exactly this three-step loop asked of
+Claude in chat.
 
 ## Notes / things to verify
 
