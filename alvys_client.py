@@ -6,8 +6,21 @@ import time
 import requests
 
 TOKEN_URL = "https://auth.alvys.com/oauth/token"
-API_BASE_URL = "https://api.alvys.com/public"
+API_BASE_URL = "https://integrations.alvys.com"
 AUDIENCE = "https://api.alvys.com/public/"
+
+# Alvys requires at least one non-date search parameter on both endpoints; a
+# date range alone isn't enough (verified via the API's own validation
+# errors). Defaulting `status` to the full enum below when the caller
+# doesn't pass one keeps a plain "everything in this date range" call
+# working without every caller needing to know that quirk.
+ALL_LOAD_STATUSES = [
+    "TONU", "Dispatched", "In Transit", "Queued", "Paid", "Open", "Completed",
+    "Financed", "Cancelled", "Covered", "In Review", "Released-Carrier Paid",
+    "Reserved", "Trip Completed", "En-Route", "Quoted", "Admin", "Invoiced",
+    "Carrier Paid", "Released", "Delivered",
+]
+ALL_INVOICE_STATUSES = ["Draft", "AwaitingPayment", "Paid"]
 
 
 class AlvysAuthError(Exception):
@@ -47,29 +60,29 @@ class AlvysClient:
             self._fetch_token()
         return self._token
 
-    def get(self, path, params=None):
-        """Low-level GET against the Alvys public API. `path` is relative, e.g. '/loads/search'."""
+    def post(self, path, body=None):
+        """Low-level POST against the Alvys integrations API. `path` is relative, e.g. '/api/p/v1/loads/search'."""
         headers = {"Authorization": f"Bearer {self._get_token()}"}
-        response = requests.get(f"{API_BASE_URL}{path}", headers=headers, params=params, timeout=30)
+        response = requests.post(f"{API_BASE_URL}{path}", headers=headers, json=body or {}, timeout=30)
         response.raise_for_status()
         return response.json()
 
-    def search_loads(self, start_date=None, end_date=None, **params):
-        # NOTE: endpoint path/params are best-effort from Alvys's public docs
-        # (docs.alvys.com/docs/create-queries-and-retrieve-data-from-the-alvys-api).
-        # Verify against a live call / the docs and adjust if the field names differ.
-        query = dict(params)
-        if start_date:
-            query["startDate"] = start_date
-        if end_date:
-            query["endDate"] = end_date
-        return self.get("/loads/search", params=query)
+    def search_loads(self, start_date=None, end_date=None, page=0, page_size=200, status=None, **body):
+        """POST /api/p/v1/loads/search. `start_date`/`end_date` are ISO-8601 datetimes."""
+        payload = dict(body)
+        payload["page"] = page
+        payload["pageSize"] = page_size
+        if start_date or end_date:
+            payload["dateRange"] = {"startDate": start_date, "endDate": end_date}
+        payload["status"] = status if status else ALL_LOAD_STATUSES
+        return self.post("/api/p/v1/loads/search", body=payload)
 
-    def search_invoices(self, start_date=None, end_date=None, **params):
-        # NOTE: same caveat as search_loads -- verify against live docs/response shape.
-        query = dict(params)
-        if start_date:
-            query["startDate"] = start_date
-        if end_date:
-            query["endDate"] = end_date
-        return self.get("/invoices/search", params=query)
+    def search_invoices(self, start_date=None, end_date=None, page=0, page_size=200, status=None, **body):
+        """POST /api/p/v1/invoices/search. `start_date`/`end_date` are ISO-8601 datetimes, applied to invoicedDateRange."""
+        payload = dict(body)
+        payload["page"] = page
+        payload["pageSize"] = page_size
+        if start_date or end_date:
+            payload["invoicedDateRange"] = {"start": start_date, "end": end_date}
+        payload["status"] = status if status else ALL_INVOICE_STATUSES
+        return self.post("/api/p/v1/invoices/search", body=payload)

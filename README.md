@@ -41,21 +41,35 @@ python statement_export.py --start-date 2026-07-01 --end-date 2026-08-31 --outpu
 
 Paste the resulting CSV (or upload the file) into the tracker's Import tab.
 `--customers` accepts a comma-separated list of case-insensitive substrings
-to match against the load's customer name (defaults to `glovis,jess
-smith,berg mill`) if you need to add or change which customers it pulls.
+to match against the load's customer name (defaults to `mobis,imports/
+exports,jess smith`) if you need to add or change which customers it pulls.
+These defaults are deliberately specific: Alvys has multiple divisions with
+overlapping names (e.g. `GLOVIS America, Inc.` vs `Glovis (Mobis Division)
+America, Inc`, or `Berg Mill Supply` vs `Berg Mill Supply
+(Imports/Exports)`) — a looser match like `glovis` or `berg mill` would
+pull in the wrong division's loads.
 
 ## Notes / things to verify
 
 - Auth uses Alvys's OAuth2 client-credentials flow
   (`POST https://auth.alvys.com/oauth/token`).
-- The exact `/loads/search` and `/invoices/search` paths and query
-  parameters in `alvys_client.py` are based on Alvys's public docs
-  (docs.alvys.com) but haven't been verified against a live call yet —
-  run a small test once real credentials are in place and adjust field
-  names if the response shape differs.
+- **Verified against a live account:** the search endpoints are
+  `POST https://integrations.alvys.com/api/p/v1/loads/search` and
+  `.../invoices/search` (JSON body: `page`, `pageSize`, `dateRange` /
+  `invoicedDateRange`, `status`) — not the GET `/public/...` paths this
+  originally assumed. Alvys requires at least one non-date filter
+  (`status`, `PONumbers`, `CustomerId`, `LoadNumbers`, `OrderNumbers`, ...),
+  so `alvys_client.py` defaults `status` to the full enum
+  (`ALL_LOAD_STATUSES` / `ALL_INVOICE_STATUSES`) when a caller doesn't pass
+  one. Responses are shaped `{Page, PageSize, Total, Items: [...]}`.
+- On a load record, `VesselName` isn't a top-level field — it's an entry in
+  `References` where `Name == "Vessel Name"`. Origin/destination come from
+  `Stops` (`StopType == "Pickup"` / `"Delivery"`), and the billable amount
+  is `CustomerRate.Amount`. See `statement_export.py` for the extraction
+  logic.
+- `generate_report.py` and `statement_export.py` are otherwise both
+  single-page pulls / paginated pulls respectively — `generate_report.py`
+  doesn't loop over pages yet, so long date ranges are capped at the first
+  200 rows per endpoint.
 - Currently the Alvys public API is read-only, so this only pulls data;
   it doesn't write anything back to Alvys.
-- The field names `statement_export.py` looks for on each load record
-  (`FIELD_CANDIDATES`) are also best-effort guesses — once you've made a
-  live call, check the real field names and adjust the candidate lists if
-  needed.

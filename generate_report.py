@@ -19,7 +19,7 @@ def parse_args():
 
 
 def to_dataframe(payload):
-    rows = payload.get("data", payload) if isinstance(payload, dict) else payload
+    rows = payload.get("Items", payload) if isinstance(payload, dict) else payload
     return pd.json_normalize(rows)
 
 
