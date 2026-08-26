@@ -432,9 +432,18 @@
   var GENERATED_AT = "/*__GENERATED_AT__*/";
 
   var THRESHOLD = 2;
+  var TIMEFRAME_OPTIONS = [
+    { value: "24h", label: "Past 24 hours", hours: 24 },
+    { value: "72h", label: "Past 72 hours", hours: 72 },
+    { value: "7d", label: "Past 7 days", hours: 24 * 7 },
+    { value: "14d", label: "Past 14 days", hours: 24 * 14 },
+    { value: "30d", label: "Past 30 days", hours: 24 * 30 },
+    { value: "all", label: "All time", hours: null }
+  ];
   var state = {
     rows: [],
     customer: "__all__",
+    timeframe: "all",
     onlyFlagged: false,
     sortKey: "hours_from_appointment",
     sortDir: "desc",
@@ -557,11 +566,28 @@
       var saved = localStorage.getItem("detention-tracker:customer");
       var customers = uniqueCustomers();
       if (saved && customers.indexOf(saved) !== -1) state.customer = saved;
+      var savedTimeframe = localStorage.getItem("detention-tracker:timeframe");
+      if (savedTimeframe && TIMEFRAME_OPTIONS.some(function(o){ return o.value === savedTimeframe; })) {
+        state.timeframe = savedTimeframe;
+      }
     } catch (e) { /* storage unavailable, ignore */ }
   }
 
   function saveCustomerPref(){
     try { localStorage.setItem("detention-tracker:customer", state.customer); } catch (e) { /* ignore */ }
+  }
+
+  function saveTimeframePref(){
+    try { localStorage.setItem("detention-tracker:timeframe", state.timeframe); } catch (e) { /* ignore */ }
+  }
+
+  // The single timestamp a stop is judged "recent" by -- whichever actually
+  // happened: departure, else arrival, else the appointment itself.
+  function referenceTimestamp(row){
+    var raw = row.departure || row.arrival || row.appointment;
+    if (!raw) return null;
+    var d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
   }
 
   function uniqueCustomers(){
@@ -640,9 +666,15 @@
     if (!state.rows.length) { renderEmpty(); return; }
 
     var customers = uniqueCustomers();
+    var timeframeOpt = TIMEFRAME_OPTIONS.filter(function(o){ return o.value === state.timeframe; })[0] || TIMEFRAME_OPTIONS[TIMEFRAME_OPTIONS.length - 1];
+    var cutoff = timeframeOpt.hours === null ? null : Date.now() - timeframeOpt.hours * 3600000;
     var filtered = state.rows.filter(function(r){
       if (state.customer !== "__all__" && r.customer !== state.customer) return false;
       if (state.onlyFlagged && !r.detention_flag) return false;
+      if (cutoff !== null) {
+        var ts = referenceTimestamp(r);
+        if (ts === null || ts.getTime() < cutoff) return false;
+      }
       return true;
     });
 
@@ -661,10 +693,10 @@
     var totalDetentionHours = filtered.reduce(function(sum, r){
       return sum + (r.detention_flag && r.hours_from_appointment ? Math.max(0, r.hours_from_appointment) : 0);
     }, 0);
-    var custCount = state.customer === "__all__" ? customers.length : 1;
+    var custCount = state.customer === "__all__" ? Object.keys(filtered.reduce(function(set, r){ set[r.customer] = true; return set; }, {})).length : 1;
 
     var byCustomer = {};
-    state.rows.forEach(function(r){
+    filtered.forEach(function(r){
       if (!byCustomer[r.customer]) byCustomer[r.customer] = { flagged: 0, hours: 0, stops: 0 };
       byCustomer[r.customer].stops++;
       if (r.detention_flag) {
@@ -686,6 +718,12 @@
     html += '      <option value="__all__"' + (state.customer === "__all__" ? " selected" : "") + '>All customers (' + customers.length + ')</option>';
     customers.forEach(function(c){
       html += '<option value="' + escapeHtml(c) + '"' + (state.customer === c ? " selected" : "") + '>' + escapeHtml(c) + '</option>';
+    });
+    html += '    </select>';
+    html += '    <label for="timeframe-select">Time frame</label>';
+    html += '    <select id="timeframe-select">';
+    TIMEFRAME_OPTIONS.forEach(function(opt){
+      html += '<option value="' + opt.value + '"' + (state.timeframe === opt.value ? " selected" : "") + '>' + opt.label + '</option>';
     });
     html += '    </select>';
     html += '    <label class="check-label"><input type="checkbox" id="flagged-only"' + (state.onlyFlagged ? " checked" : "") + '/> Only over ' + THRESHOLD + 'h</label>';
@@ -773,6 +811,12 @@
     if (sel) sel.addEventListener("change", function(){
       state.customer = sel.value;
       saveCustomerPref();
+      render();
+    });
+    var timeframeSel = document.getElementById("timeframe-select");
+    if (timeframeSel) timeframeSel.addEventListener("change", function(){
+      state.timeframe = timeframeSel.value;
+      saveTimeframePref();
       render();
     });
     var flaggedOnly = document.getElementById("flagged-only");
