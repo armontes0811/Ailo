@@ -33,8 +33,12 @@ def main():
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    loads_df = to_dataframe(client.search_loads(start_date=args.start_date, end_date=args.end_date))
-    invoices_df = to_dataframe(client.search_invoices(start_date=args.start_date, end_date=args.end_date))
+    # NOTE: /loads/search doesn't actually filter by date server-side (see
+    # alvys_client.py) -- this pulls every load in the "executed" statuses
+    # and doesn't narrow by --start-date/--end-date. Use
+    # generate_detention_report.py if you need a date-scoped, stop-level view.
+    loads_df = pd.json_normalize(client.search_all_loads())
+    invoices_df = to_dataframe(client.search_invoices())
 
     with pd.ExcelWriter(args.output, engine="openpyxl") as writer:
         loads_df.to_excel(writer, sheet_name="Loads", index=False)

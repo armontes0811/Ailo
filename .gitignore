@@ -5,3 +5,6 @@ __pycache__/
 venv/
 *.xlsx
 !sample_report.xlsx
+dashboard.html
+detention_report.json
+*_detention.json
