@@ -278,7 +278,7 @@
     width:100%;
     border-collapse:collapse;
     font-size:13.5px;
-    min-width:920px;
+    min-width:1060px;
   }
   thead th{
     position:sticky;
@@ -432,6 +432,7 @@
   var GENERATED_AT = "/*__GENERATED_AT__*/";
 
   var THRESHOLD = 2;
+  var NUMERIC_KEYS = ["hours_from_appointment", "detention_hours", "dwell_hours"];
   var TIMEFRAME_OPTIONS = [
     { value: "24h", label: "Past 24 hours", hours: 24 },
     { value: "72h", label: "Past 72 hours", hours: 72 },
@@ -445,7 +446,7 @@
     customer: "__all__",
     timeframe: "all",
     onlyFlagged: false,
-    sortKey: "hours_from_appointment",
+    sortKey: "detention_hours",
     sortDir: "desc",
     sourceLabel: ""
   };
@@ -508,6 +509,13 @@
       });
       var hrs = row.hours_from_appointment;
       hrs = (hrs === "" || hrs === undefined || hrs === null) ? null : Number(hrs);
+      hrs = isNaN(hrs) ? null : hrs;
+      var detention = row.detention_hours;
+      detention = (detention === "" || detention === undefined || detention === null) ? null : Number(detention);
+      detention = isNaN(detention) ? null : detention;
+      // Older exports may not have detention_hours -- derive it from
+      // hours_from_appointment (the excess past the free THRESHOLD-hour window).
+      if (detention === null && hrs !== null) detention = Math.max(0, Math.round((hrs - THRESHOLD) * 100) / 100);
       var dwell = row.dwell_hours;
       dwell = (dwell === "" || dwell === undefined || dwell === null) ? null : Number(dwell);
       var flag = row.detention_flag;
@@ -522,7 +530,8 @@
         appointment: row.appointment || null,
         arrival: row.arrival || null,
         departure: row.departure || null,
-        hours_from_appointment: isNaN(hrs) ? null : hrs,
+        hours_from_appointment: hrs,
+        detention_hours: detention,
         dwell_hours: isNaN(dwell) ? null : dwell,
         detention_flag: !!flag
       };
@@ -655,6 +664,7 @@
         arrival: arrival.toISOString(),
         departure: departure.toISOString(),
         hours_from_appointment: Math.round(hoursFromAppt * 100) / 100,
+        detention_hours: Math.round(Math.max(0, hoursFromAppt - THRESHOLD) * 100) / 100,
         dwell_hours: Math.round(dwellHours * 100) / 100,
         detention_flag: hoursFromAppt > THRESHOLD
       });
@@ -680,8 +690,8 @@
 
     var sorted = filtered.slice().sort(function(a, b){
       var va = a[state.sortKey], vb = b[state.sortKey];
-      if (va === null || va === undefined) va = state.sortKey === "hours_from_appointment" || state.sortKey === "dwell_hours" ? -Infinity : "";
-      if (vb === null || vb === undefined) vb = state.sortKey === "hours_from_appointment" || state.sortKey === "dwell_hours" ? -Infinity : "";
+      if (va === null || va === undefined) va = NUMERIC_KEYS.indexOf(state.sortKey) !== -1 ? -Infinity : "";
+      if (vb === null || vb === undefined) vb = NUMERIC_KEYS.indexOf(state.sortKey) !== -1 ? -Infinity : "";
       var cmp;
       if (typeof va === "number" && typeof vb === "number") cmp = va - vb;
       else cmp = String(va).localeCompare(String(vb));
@@ -690,8 +700,10 @@
 
     var totalStops = filtered.length;
     var flaggedStops = filtered.filter(function(r){ return r.detention_flag; }).length;
+    // Only the time past the free 2h window counts toward total detention --
+    // not the whole appointment-to-departure span.
     var totalDetentionHours = filtered.reduce(function(sum, r){
-      return sum + (r.detention_flag && r.hours_from_appointment ? Math.max(0, r.hours_from_appointment) : 0);
+      return sum + (r.detention_hours || 0);
     }, 0);
     var custCount = state.customer === "__all__" ? Object.keys(filtered.reduce(function(set, r){ set[r.customer] = true; return set; }, {})).length : 1;
 
@@ -701,7 +713,7 @@
       byCustomer[r.customer].stops++;
       if (r.detention_flag) {
         byCustomer[r.customer].flagged++;
-        byCustomer[r.customer].hours += Math.max(0, r.hours_from_appointment || 0);
+        byCustomer[r.customer].hours += r.detention_hours || 0;
       }
     });
     var customerRanked = Object.keys(byCustomer).map(function(c){
@@ -734,7 +746,7 @@
     html += '<div class="stat-row">';
     html += statTile("Stops shown", totalStops, "");
     html += statTile("Over " + THRESHOLD + "h from appointment", flaggedStops, totalStops ? Math.round(flaggedStops/totalStops*100) + "% of shown stops" : "", flaggedStops > 0);
-    html += statTile("Total detention", totalDetentionHours.toFixed(1) + "h", "hours past appointment, flagged stops only");
+    html += statTile("Total detention", totalDetentionHours.toFixed(1) + "h", "hours past the " + THRESHOLD + "h free window");
     html += statTile("Customers", custCount, state.customer === "__all__" ? "in view" : "selected");
     html += '</div>';
 
@@ -765,6 +777,7 @@
       html += th("arrival", "Arrival");
       html += th("departure", "Departure");
       html += th("hours_from_appointment", "Hrs vs. appt.", true);
+      html += th("detention_hours", "Detention (past " + THRESHOLD + "h)", true);
       html += th("dwell_hours", "Dwell", true);
       html += '</tr></thead><tbody>';
       sorted.forEach(function(r){
@@ -776,6 +789,7 @@
         html += '<td class="mono">' + fmtDate(r.appointment) + '</td>';
         html += '<td class="mono">' + fmtDate(r.arrival) + '</td>';
         html += '<td class="mono">' + fmtDate(r.departure) + '</td>';
+        html += '<td class="num mono cell-muted">' + fmtHours(r.hours_from_appointment) + '</td>';
         html += '<td class="num mono">' + badgeFor(r) + '</td>';
         html += '<td class="num mono cell-muted">' + fmtHours(r.dwell_hours) + '</td>';
         html += '</tr>';
@@ -789,11 +803,11 @@
   }
 
   function badgeFor(r){
-    if (r.hours_from_appointment === null || r.hours_from_appointment === undefined) {
-      return '<span class="badge neutral">' + fmtHours(r.hours_from_appointment) + '</span>';
+    if (r.detention_hours === null || r.detention_hours === undefined) {
+      return '<span class="badge neutral">' + fmtHours(r.detention_hours) + '</span>';
     }
-    if (r.detention_flag) return '<span class="badge critical">' + fmtHours(r.hours_from_appointment) + '</span>';
-    return '<span class="badge good">' + fmtHours(r.hours_from_appointment) + '</span>';
+    if (r.detention_flag) return '<span class="badge critical">' + fmtHours(r.detention_hours) + '</span>';
+    return '<span class="badge good">' + fmtHours(r.detention_hours) + '</span>';
   }
 
   function statTile(label, value, sub, isCritical){
@@ -831,7 +845,7 @@
           state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
         } else {
           state.sortKey = key;
-          state.sortDir = (key === "hours_from_appointment" || key === "dwell_hours") ? "desc" : "asc";
+          state.sortDir = NUMERIC_KEYS.indexOf(key) !== -1 ? "desc" : "asc";
         }
         render();
       });

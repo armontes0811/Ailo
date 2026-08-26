@@ -31,6 +31,7 @@ DETAIL_COLUMNS = [
     "arrival",
     "departure",
     "hours_from_appointment",
+    "detention_hours",
     "dwell_hours",
     "detention_flag",
 ]
@@ -67,7 +68,7 @@ def write_excel(rows_df, output_path):
             .agg(
                 stops=("load_number", "count"),
                 flagged_stops=("detention_flag", "sum"),
-                total_detention_hours=("hours_from_appointment", lambda s: round(s.clip(lower=0).sum(), 2)),
+                total_detention_hours=("detention_hours", lambda s: round(s.sum(), 2)),
             )
             .sort_values("total_detention_hours", ascending=False)
             .reset_index()

@@ -32,6 +32,13 @@ departure was more than 2 hours after the appointment (for stops with a
 scheduled-window instead of a fixed appointment, the end of that window is
 used). Add `--customer "Some Customer"` to scope to one customer.
 
+Two hours columns, two different things:
+- `hours_from_appointment` — the full span from appointment to departure
+  (includes the free 2-hour window).
+- `detention_hours` — just the billable excess *past* that free window
+  (`0` if the stop wasn't held that long). This is what "By Customer" totals
+  and the dashboard's "Total detention" stat add up — not the full span.
+
 Writes:
 - `july_detention.xlsx` — a "Detention Detail" sheet (filterable, flagged
   rows highlighted red) and a "By Customer" summary sheet.

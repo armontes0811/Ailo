@@ -1,10 +1,12 @@
 """Flatten Alvys Loads into per-stop rows and compute detention time.
 
 Field names below are taken from a live /loads/search response (verified
-2026-08-26), not guessed from docs. Detention is measured the way ops asks
-for it here: how long the driver was at the stop *past the appointment
-time*, i.e. departure minus appointment. A stop is flagged when that
-exceeds `DETENTION_THRESHOLD_HOURS`.
+2026-08-26), not guessed from docs. `hours_from_appointment` is the full
+span from appointment to departure (so it includes the free 2-hour window).
+`detention_hours` is the billable part -- only the time *past* that free
+window (0 if the stop wasn't held that long). A stop is flagged when
+`hours_from_appointment` exceeds `DETENTION_THRESHOLD_HOURS`, which is the
+same thing as `detention_hours` being positive.
 
 For FCFS stops (no fixed appointment, just a window) the "appointment" used
 is the end of that window -- the time by which the stop should have been
@@ -48,8 +50,10 @@ def flatten_loads(loads):
             departure = pd.to_datetime(stop.get("DepartedAt"), errors="coerce", utc=False)
 
             hours_from_appt = None
+            detention_hours = None
             if pd.notna(departure) and pd.notna(appointment):
                 hours_from_appt = round((departure - appointment).total_seconds() / 3600, 2)
+                detention_hours = round(max(0.0, hours_from_appt - DETENTION_THRESHOLD_HOURS), 2)
 
             dwell_hours = None
             if pd.notna(departure) and pd.notna(arrival):
@@ -66,6 +70,7 @@ def flatten_loads(loads):
                     "arrival": arrival.isoformat() if pd.notna(arrival) else None,
                     "departure": departure.isoformat() if pd.notna(departure) else None,
                     "hours_from_appointment": hours_from_appt,
+                    "detention_hours": detention_hours,
                     "dwell_hours": dwell_hours,
                     "detention_flag": hours_from_appt is not None and hours_from_appt > DETENTION_THRESHOLD_HOURS,
                 }
