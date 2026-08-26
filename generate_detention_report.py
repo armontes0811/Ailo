@@ -33,6 +33,7 @@ DETAIL_COLUMNS = [
     "hours_from_appointment",
     "detention_hours",
     "dwell_hours",
+    "on_time",
     "detention_flag",
 ]
 

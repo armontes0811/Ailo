@@ -30,14 +30,20 @@ Pulls every Load in Alvys, flattens each Stop into one row (customer, stop
 type, location, appointment, arrival, departure), and flags any stop where
 departure was more than 2 hours after the appointment (for stops with a
 scheduled-window instead of a fixed appointment, the end of that window is
-used). Add `--customer "Some Customer"` to scope to one customer.
+used) -- **and only if the driver arrived on time** (at or before the
+appointment). A late arrival never counts as detention, no matter how long
+the stop took, since the driver didn't hold up their end of the appointment
+either. If arrival isn't known, it doesn't qualify (can't confirm on-time).
+Add `--customer "Some Customer"` to scope to one customer.
 
-Two hours columns, two different things:
+Columns worth knowing:
+- `on_time` — whether the driver arrived at or before the appointment.
+  Detention only applies when this is true.
 - `hours_from_appointment` — the full span from appointment to departure
-  (includes the free 2-hour window).
-- `detention_hours` — just the billable excess *past* that free window
-  (`0` if the stop wasn't held that long). This is what "By Customer" totals
-  and the dashboard's "Total detention" stat add up — not the full span.
+  (includes the free 2-hour window), regardless of `on_time`.
+- `detention_hours` — the billable excess past that free window, `0` unless
+  `on_time` is true (and the stop still ran over 2h). This is what "By
+  Customer" totals and the dashboard's "Total detention" stat add up.
 
 Writes:
 - `july_detention.xlsx` — a "Detention Detail" sheet (filterable, flagged

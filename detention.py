@@ -4,9 +4,11 @@ Field names below are taken from a live /loads/search response (verified
 2026-08-26), not guessed from docs. `hours_from_appointment` is the full
 span from appointment to departure (so it includes the free 2-hour window).
 `detention_hours` is the billable part -- only the time *past* that free
-window (0 if the stop wasn't held that long). A stop is flagged when
-`hours_from_appointment` exceeds `DETENTION_THRESHOLD_HOURS`, which is the
-same thing as `detention_hours` being positive.
+window (0 if the stop wasn't held that long). A stop only qualifies for
+detention if the driver arrived on time (arrival at or before the
+appointment); if arrival is after the appointment, or arrival isn't known,
+`detention_hours` is 0 regardless of how long the stop took. A stop is
+flagged exactly when `detention_hours` is positive.
 
 For FCFS stops (no fixed appointment, just a window) the "appointment" used
 is the end of that window -- the time by which the stop should have been
@@ -49,11 +51,13 @@ def flatten_loads(loads):
             arrival = pd.to_datetime(stop.get("ArrivedAt"), errors="coerce", utc=False)
             departure = pd.to_datetime(stop.get("DepartedAt"), errors="coerce", utc=False)
 
+            on_time = pd.notna(arrival) and pd.notna(appointment) and arrival <= appointment
+
             hours_from_appt = None
             detention_hours = None
             if pd.notna(departure) and pd.notna(appointment):
                 hours_from_appt = round((departure - appointment).total_seconds() / 3600, 2)
-                detention_hours = round(max(0.0, hours_from_appt - DETENTION_THRESHOLD_HOURS), 2)
+                detention_hours = round(max(0.0, hours_from_appt - DETENTION_THRESHOLD_HOURS), 2) if on_time else 0.0
 
             dwell_hours = None
             if pd.notna(departure) and pd.notna(arrival):
@@ -72,7 +76,8 @@ def flatten_loads(loads):
                     "hours_from_appointment": hours_from_appt,
                     "detention_hours": detention_hours,
                     "dwell_hours": dwell_hours,
-                    "detention_flag": hours_from_appt is not None and hours_from_appt > DETENTION_THRESHOLD_HOURS,
+                    "on_time": bool(on_time),
+                    "detention_flag": bool(detention_hours and detention_hours > 0),
                 }
             )
     return rows

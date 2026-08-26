@@ -510,17 +510,31 @@
       var hrs = row.hours_from_appointment;
       hrs = (hrs === "" || hrs === undefined || hrs === null) ? null : Number(hrs);
       hrs = isNaN(hrs) ? null : hrs;
+
+      // A stop only qualifies for detention if the driver arrived on time
+      // (at or before the appointment). Unknown arrival -> can't confirm,
+      // so it doesn't qualify either.
+      var onTime = row.on_time;
+      if (typeof onTime === "string") onTime = onTime.trim().toLowerCase() === "true";
+      if (onTime === undefined || onTime === null) {
+        var arrivalDate = row.arrival ? new Date(row.arrival) : null;
+        var apptDate = row.appointment ? new Date(row.appointment) : null;
+        onTime = !!(arrivalDate && apptDate && !isNaN(arrivalDate.getTime()) && !isNaN(apptDate.getTime()) && arrivalDate.getTime() <= apptDate.getTime());
+      }
+
       var detention = row.detention_hours;
       detention = (detention === "" || detention === undefined || detention === null) ? null : Number(detention);
       detention = isNaN(detention) ? null : detention;
       // Older exports may not have detention_hours -- derive it from
-      // hours_from_appointment (the excess past the free THRESHOLD-hour window).
-      if (detention === null && hrs !== null) detention = Math.max(0, Math.round((hrs - THRESHOLD) * 100) / 100);
+      // hours_from_appointment (the excess past the free THRESHOLD-hour
+      // window), zeroed out unless the driver arrived on time.
+      if (detention === null && hrs !== null) detention = onTime ? Math.max(0, Math.round((hrs - THRESHOLD) * 100) / 100) : 0;
+
       var dwell = row.dwell_hours;
       dwell = (dwell === "" || dwell === undefined || dwell === null) ? null : Number(dwell);
       var flag = row.detention_flag;
       if (typeof flag === "string") flag = flag.trim().toLowerCase() === "true";
-      if (flag === undefined || flag === null) flag = hrs !== null && hrs > THRESHOLD;
+      if (flag === undefined || flag === null) flag = detention !== null && detention > 0;
       return {
         load_number: row.load_number || row.load || "",
         customer: row.customer || "Unknown customer",
@@ -533,6 +547,7 @@
         hours_from_appointment: hrs,
         detention_hours: detention,
         dwell_hours: isNaN(dwell) ? null : dwell,
+        on_time: !!onTime,
         detention_flag: !!flag
       };
     });
@@ -653,6 +668,8 @@
 
       var hoursFromAppt = (departure - appt) / 3600000;
       var dwellHours = (departure - arrival) / 3600000;
+      var onTime = arrival.getTime() <= appt.getTime();
+      var detentionHours = onTime ? Math.max(0, Math.round((hoursFromAppt - THRESHOLD) * 100) / 100) : 0;
 
       rows.push({
         load_number: "L-" + (loadN++),
@@ -664,9 +681,10 @@
         arrival: arrival.toISOString(),
         departure: departure.toISOString(),
         hours_from_appointment: Math.round(hoursFromAppt * 100) / 100,
-        detention_hours: Math.round(Math.max(0, hoursFromAppt - THRESHOLD) * 100) / 100,
+        detention_hours: detentionHours,
         dwell_hours: Math.round(dwellHours * 100) / 100,
-        detention_flag: hoursFromAppt > THRESHOLD
+        on_time: onTime,
+        detention_flag: detentionHours > 0
       });
     }
     return rows;
@@ -787,7 +805,7 @@
         html += '<td>' + escapeHtml(r.stop_type) + (r.stop_sequence ? ' <span class="cell-muted">#' + escapeHtml(r.stop_sequence) + '</span>' : '') + '</td>';
         html += '<td>' + escapeHtml(r.location) + '</td>';
         html += '<td class="mono">' + fmtDate(r.appointment) + '</td>';
-        html += '<td class="mono">' + fmtDate(r.arrival) + '</td>';
+        html += '<td class="mono">' + fmtDate(r.arrival) + (r.arrival && r.appointment && !r.on_time ? ' <span class="cell-muted">(late)</span>' : '') + '</td>';
         html += '<td class="mono">' + fmtDate(r.departure) + '</td>';
         html += '<td class="num mono cell-muted">' + fmtHours(r.hours_from_appointment) + '</td>';
         html += '<td class="num mono">' + badgeFor(r) + '</td>';
@@ -807,6 +825,10 @@
       return '<span class="badge neutral">' + fmtHours(r.detention_hours) + '</span>';
     }
     if (r.detention_flag) return '<span class="badge critical">' + fmtHours(r.detention_hours) + '</span>';
+    var lateDisqualified = !r.on_time && r.arrival && r.appointment && r.hours_from_appointment !== null && r.hours_from_appointment > THRESHOLD;
+    if (lateDisqualified) {
+      return '<span class="badge neutral" title="Arrival was after the appointment, so this stop doesn’t qualify for detention">' + fmtHours(r.detention_hours) + '</span>';
+    }
     return '<span class="badge good">' + fmtHours(r.detention_hours) + '</span>';
   }
 
